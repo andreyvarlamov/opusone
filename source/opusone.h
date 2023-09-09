@@ -69,6 +69,8 @@ struct game_state
     u32 VBO;
     u32 EBO;
     u32 IndexCount;
+
+    f32 Angle;
 };
 
 void

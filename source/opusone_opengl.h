@@ -87,6 +87,53 @@ OpenGL_UseShader(u32 ShaderID)
     glUseProgram(ShaderID);
 }
 
+inline b32
+OpenGL_SetUniformInt(u32 ShaderID, const char *UniformName, i32 Value, b32 UseProgram)
+{
+    if (UseProgram)
+    {
+        glUseProgram(ShaderID);
+    }
+
+    i32 UniformLocation = glGetUniformLocation(ShaderID, UniformName);
+
+    if (UniformLocation == -1)
+    {
+        return false;
+    }
+
+    glUniform1i(UniformLocation, Value);
+    return true;
+}
+
+inline b32
+OpenGL_SetUniformVec3F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram);
+
+inline b32
+OpenGL_SetUniformVec4F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram);
+
+inline b32
+OpenGL_SetUniformMat3F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram);
+
+inline b32
+OpenGL_SetUniformMat4F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram)
+{
+    if (UseProgram)
+    {
+        glUseProgram(ShaderID);
+    }
+    
+    i32 UniformLocation = glGetUniformLocation(ShaderID, UniformName);
+
+    if (UniformLocation == -1)
+    {
+        return false;
+    }
+
+    glUniformMatrix4fv(UniformLocation, 1, false, Value);
+    return true;
+}
+
 void
 OpenGL_PrepareVertexData(u32 VertexCount, size_t *AttribStrides, u32 *AttribComponentCounts, u32 AttribCount,
                          u32 IndexCount, size_t IndexSize, b32 IsDynamicDraw,
