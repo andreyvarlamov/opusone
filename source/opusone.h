@@ -65,9 +65,10 @@ struct game_memory
 struct game_state
 {
     u32 Shader;
-    u32 VBO;
     u32 VAO;
+    u32 VBO;
     u32 EBO;
+    u32 IndexCount;
 };
 
 void
