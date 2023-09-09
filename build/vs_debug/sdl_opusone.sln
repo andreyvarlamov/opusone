@@ -1,0 +1,49 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33424.131
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "sdl_opusone", "..\sdl_opusone.exe", "{4936C829-7E43-4E95-8344-2FA0FEF10600}"
+	ProjectSection(DebuggerProjectSystem) = preProject
+		PortSupplier = 00000000-0000-0000-0000-000000000000
+		Executable = C:\dev\opusone\build\sdl_opusone.exe
+		RemoteMachine = DESKTOP-6CIPBQA
+		StartingDirectory = C:\dev\opusone
+		Environment = path=C:\dev\opusone\dlls	
+		LaunchingEngine = 00000000-0000-0000-0000-000000000000
+		UseLegacyDebugEngines = No
+		LaunchSQLEngine = No
+		AttachLaunchAction = No
+		IORedirection = Auto
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "opus_one_debug", "opus_one_debug.vcxproj", "{37D75EA9-B4A9-4CCC-A649-29CC23B9DF20}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4936C829-7E43-4E95-8344-2FA0FEF10600}.Debug|x64.ActiveCfg = Release|x64
+		{4936C829-7E43-4E95-8344-2FA0FEF10600}.Debug|x86.ActiveCfg = Release|x64
+		{4936C829-7E43-4E95-8344-2FA0FEF10600}.Release|x64.ActiveCfg = Release|x64
+		{4936C829-7E43-4E95-8344-2FA0FEF10600}.Release|x86.ActiveCfg = Release|x64
+		{37D75EA9-B4A9-4CCC-A649-29CC23B9DF20}.Debug|x64.ActiveCfg = Debug|x64
+		{37D75EA9-B4A9-4CCC-A649-29CC23B9DF20}.Debug|x64.Build.0 = Debug|x64
+		{37D75EA9-B4A9-4CCC-A649-29CC23B9DF20}.Debug|x86.ActiveCfg = Debug|Win32
+		{37D75EA9-B4A9-4CCC-A649-29CC23B9DF20}.Debug|x86.Build.0 = Debug|Win32
+		{37D75EA9-B4A9-4CCC-A649-29CC23B9DF20}.Release|x64.ActiveCfg = Release|x64
+		{37D75EA9-B4A9-4CCC-A649-29CC23B9DF20}.Release|x64.Build.0 = Release|x64
+		{37D75EA9-B4A9-4CCC-A649-29CC23B9DF20}.Release|x86.ActiveCfg = Release|Win32
+		{37D75EA9-B4A9-4CCC-A649-29CC23B9DF20}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6FE53E42-6A17-4A69-90F6-A950C2D3238D}
+	EndGlobalSection
+EndGlobal
