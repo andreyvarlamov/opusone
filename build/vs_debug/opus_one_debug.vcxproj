@@ -132,6 +132,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\opusone.h" />
+    <ClInclude Include="..\..\source\opusone_common.h" />
+    <ClInclude Include="..\..\source\opusone_linmath.h" />
+    <ClInclude Include="..\..\source\opusone_math.h" />
+    <ClInclude Include="..\..\source\opusone_opengl.h" />
+    <ClInclude Include="..\..\source\opusone_platform.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

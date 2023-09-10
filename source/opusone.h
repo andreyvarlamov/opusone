@@ -14,6 +14,14 @@ struct camera
     b32 IsLookAround;
 };
 
+enum camera_control_scheme
+{
+    CAMERA_CONTROL_MOUSE = 0,
+    CAMERA_CONTROL_FLY_AROUND,
+    CAMERA_CONTROL_FPS,
+    CAMERA_CONTROL_COUNT
+};
+
 struct game_state
 {
     u32 Shader;
@@ -25,6 +33,7 @@ struct game_state
     f32 Angle;
 
     camera Camera;
+    camera_control_scheme CameraControlScheme;
 };
 
 #endif

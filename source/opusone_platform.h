@@ -33,6 +33,9 @@ struct game_memory
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameShouldQuit);
 
+void
+PlatformSetRelativeMouse(b32 Enabled);
+
 char *
 PlatformReadFile(const char *FilePath);
 

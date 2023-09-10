@@ -83,6 +83,12 @@ main(int Argc, char *Argv[])
     return 0;
 }
 
+void
+PlatformSetRelativeMouse(b32 Enabled)
+{
+    Assert(SDL_SetRelativeMouseMode((SDL_bool) Enabled) == 0);
+}
+
 char *
 PlatformReadFile(const char *FilePath)
 {
