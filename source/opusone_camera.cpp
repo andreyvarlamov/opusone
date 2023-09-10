@@ -5,7 +5,7 @@
 #include "opusone_math.h"
 #include "opusone_linmath.h"
 
-void
+internal inline void
 UpdateCameraOrientation(camera *Camera, f32 DeltaTheta, f32 DeltaPhi)
 {
     Camera->Theta += DeltaTheta;
@@ -29,31 +29,13 @@ UpdateCameraOrientation(camera *Camera, f32 DeltaTheta, f32 DeltaPhi)
     }
 }
 
-void
+internal void
 UpdateCameraSphericalOrientation(camera *Camera, f32 DeltaRadius, f32 DeltaTheta, f32 DeltaPhi)
 {
     vec3 TranslationFromOldPositionToTarget = Camera->Radius * -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
 
-    Camera->Theta += DeltaTheta;
-    if (Camera->Theta < 0.0f)
-    {
-        Camera->Theta += 360.0f;
-    }
-    else if (Camera->Theta > 360.0f)
-    {
-        Camera->Theta -= 360.0f;
-    }
-
-    Camera->Phi += DeltaPhi;
-    if (Camera->Phi > 179.0f)
-    {
-        Camera->Phi = 179.0f;
-    }
-    else if (Camera->Phi < 1.0f)
-    {
-        Camera->Phi = 1.0f;
-    }
-
+    UpdateCameraOrientation(Camera, DeltaTheta, DeltaPhi);
+    
     Camera->Radius += DeltaRadius;
     if (Camera->Radius < 1.0f)
     {
@@ -64,35 +46,30 @@ UpdateCameraSphericalOrientation(camera *Camera, f32 DeltaRadius, f32 DeltaTheta
     Camera->Position += TranslationFromOldPositionToTarget + TranslationFromTargetToNewPosition;
 }
 
-void
-UpdateCameraPosition(camera *Camera, vec3 DeltaPositionLocal)
+internal inline mat3
+GetCameraLocalToWorldTransform(camera *Camera)
 {
     vec3 Front = -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
     vec3 Right = VecCross(Front, vec3 { 0.0f, 1.0f, 0.0f });
     vec3 Up = VecCross(Right, Front);
     mat3 LocalToWorld = Mat3FromCols(Right, Up, Front);
+    return LocalToWorld;
+}
+
+internal void
+UpdateCameraPosition(camera *Camera, vec3 DeltaPositionLocal)
+{
+    mat3 LocalToWorld = GetCameraLocalToWorldTransform(Camera);
     Camera->Position += LocalToWorld * DeltaPositionLocal;
 }
 
-void
+internal void
 UpdateCameraHorizontalPosition(camera *Camera, f32 MoveSpeedWorld, vec3 MoveDirLocal)
 {
-    vec3 Front = -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
-    vec3 Right = VecCross(Front, vec3 { 0.0f, 1.0f, 0.0f });
-    vec3 Up = VecCross(Right, Front);
-    mat3 LocalToWorld = Mat3FromCols(Right, Up, Front);
+    mat3 LocalToWorld = GetCameraLocalToWorldTransform(Camera);
     vec3 DeltaPositionWorld = LocalToWorld * MoveDirLocal;
     DeltaPositionWorld.Y = 0.0f;
     Camera->Position += MoveSpeedWorld * VecNormalize(DeltaPositionWorld);
-}
-
-mat4
-GetCameraViewMat(camera *Camera)
-{
-    vec3 Front = -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
-    vec3 CameraTarget = Camera->Position + Front;
-    mat4 Result = GetViewMat(Camera->Position, CameraTarget, vec3 { 0.0f, 1.0f, 0.0f });
-    return Result;
 }
 
 void
@@ -225,3 +202,11 @@ UpdateCameraForFrame(game_state *GameState, game_input *GameInput)
     }
 }
 
+mat4
+GetCameraViewMat(camera *Camera)
+{
+    vec3 Front = -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
+    vec3 CameraTarget = Camera->Position + Front;
+    mat4 Result = GetViewMat(Camera->Position, CameraTarget, vec3 { 0.0f, 1.0f, 0.0f });
+    return Result;
+}

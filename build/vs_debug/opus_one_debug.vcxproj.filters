@@ -13,6 +13,9 @@
     <ClCompile Include="..\..\source\opusone.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\opusone_camera.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\opusone.h">
@@ -31,6 +34,9 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\opusone_platform.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\opusone_camera.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -128,10 +128,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\source\opusone.cpp" />
+    <ClCompile Include="..\..\source\opusone_camera.cpp" />
     <ClCompile Include="..\..\source\sdl_opusone.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\opusone.h" />
+    <ClInclude Include="..\..\source\opusone_camera.h" />
     <ClInclude Include="..\..\source\opusone_common.h" />
     <ClInclude Include="..\..\source\opusone_linmath.h" />
     <ClInclude Include="..\..\source\opusone_math.h" />
