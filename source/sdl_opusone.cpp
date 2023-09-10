@@ -4,7 +4,8 @@
 #include <glad/glad.h>
 #include <sdl2/SDL.h>
 
-#include "opusone.h"
+#include "opusone_common.h"
+#include "opusone_platform.h"
 
 int
 main(int Argc, char *Argv[])

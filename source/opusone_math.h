@@ -1,6 +1,8 @@
 #ifndef OPUSONE_MATH_H
 #define OPUSONE_MATH_H
 
+#include "opusone_common.h"
+
 #include <cmath>
 #include <cfloat>
 

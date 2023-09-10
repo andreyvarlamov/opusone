@@ -1,7 +1,7 @@
 #ifndef OPUSONE_LINMATH_H
 #define OPUSONE_LINMATH_H
 
-#include "opusone.h"
+#include "opusone_common.h"
 #include "opusone_math.h"
 
 // NOTE: All mat functions assume Column-Major representation [Column][Row]
@@ -227,12 +227,29 @@ VecScalarTriple(vec3 A, vec3 B, vec3 C)
     return VecDot(A, VecCross(B, C));
 }
 
-internal inline bool
+internal inline b32
 IsZeroVector(vec3 Vector)
 {
     return ((Vector.X <= FLT_EPSILON) &&
             (Vector.Y <= FLT_EPSILON) &&
             (Vector.Z <= FLT_EPSILON));
+}
+
+internal inline vec3
+VecSphericalToCartesian(f32 Theta, f32 Phi)
+{
+    // NOTE: Using coordinate system ZXY; Theta = Angle from axis Z in direction of X (CCW);
+    // Phi = Angle from axis Y in direction ZX plane (CW, from top to down)
+    vec3 Result = {};
+
+    f32 ThetaRads = ToRadiansF(Theta);
+    f32 PhiRads = ToRadiansF(Phi);
+
+    Result.X = SinF(PhiRads) * SinF(ThetaRads);
+    Result.Y = CosF(PhiRads);
+    Result.Z = SinF(PhiRads) * CosF(ThetaRads);
+
+    return Result;
 }
 
 // -------------------------------------------------------------------------------
@@ -391,12 +408,25 @@ Mat3FromCols(vec3 *Cols)
 internal inline mat3
 Mat3GetRotationAroundAxis(vec3 Axis, f32 Angle)
 {
-    vec3 WorldNegZRotated = { -SinF(Angle), 0.0f, -CosF(Angle) };
-    vec3 Up = VecNormalize(Axis);
-    vec3 Right = VecNormalize(VecCross(WorldNegZRotated, Up));
-    vec3 Back = VecNormalize(VecCross(Right, Up));
+    f32 C = CosF(Angle);
+    f32 S = SinF(Angle);
+    
+    vec3 Temp = (1.0f - C) * Axis;
 
-    mat3 Result = Mat3FromCols(Right, Up, Back);
+    mat3 Result;
+
+    Result.E[0][0] = C + Temp.E[0] * Axis.E[0];
+    Result.E[0][1] = Temp.E[0] * Axis.E[1] + S * Axis.E[2];
+    Result.E[0][2] = Temp.E[0] * Axis.E[2] - S * Axis.E[1];
+
+    Result.E[1][0] = Temp.E[1] * Axis.E[0] - S * Axis.E[2];
+    Result.E[1][1] = C + Temp.E[1] * Axis.E[1];
+    Result.E[1][2] = Temp.E[1] * Axis.E[2] + S * Axis.E[0];
+
+    Result.E[2][0] = Temp.E[2] * Axis.E[0] + S * Axis.E[1];
+    Result.E[2][1] = Temp.E[2] * Axis.E[1] - S * Axis.E[0];
+    Result.E[2][2] = C + Temp.E[2] * Axis.E[2];
+
     return Result;
 }
 

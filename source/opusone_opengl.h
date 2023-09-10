@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <glad/glad.h>
 
-#include "opusone.h"
+#include "opusone_common.h"
 
 internal u32
 CompileShaderFromPath_(const char *Path, u32 ShaderType)
