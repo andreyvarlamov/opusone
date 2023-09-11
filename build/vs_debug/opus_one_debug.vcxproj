@@ -133,6 +133,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\opusone.h" />
+    <ClInclude Include="..\..\source\opusone_assimp.h" />
     <ClInclude Include="..\..\source\opusone_camera.h" />
     <ClInclude Include="..\..\source\opusone_common.h" />
     <ClInclude Include="..\..\source\opusone_linmath.h" />

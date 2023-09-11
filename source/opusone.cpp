@@ -5,6 +5,7 @@
 #include "opusone_math.h"
 #include "opusone_linmath.h"
 #include "opusone_camera.cpp"
+#include "opusone_assimp.h"
 
 #include <cstdio>
 #include <glad/glad.h>
@@ -15,6 +16,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     game_state *GameState = (game_state *) GameMemory->Storage;
     if (!GameMemory->IsInitialized)
     {
+        GameMemory->IsInitialized = true;
+
         GameState->Shader = OpenGL_BuildShaderProgram("resources/shaders/Basic.vs", "resources/shaders/Basic.fs");
 
         size_t AttribStrides[] = { sizeof(vec3), sizeof(vec3) };
@@ -28,8 +31,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->Angle = 0.0f;
 
         InitializeCamera(GameState, vec3 { 0.0f, 0.0f, 5.0f }, 0.0f, 90.0f, 5.0f, CAMERA_CONTROL_MOUSE);
-        
-        GameMemory->IsInitialized = true;
+
+        u8 *AssetArenaBase = (u8 *) GameMemory->Storage + Megabytes(4);
+        size_t AssetArenaSize = Megabytes(4);
+        GameState->AssetArena = MemoryArena(AssetArenaBase, AssetArenaSize);
+
+        imported_model *Model = Assimp_LoadModel(&GameState->AssetArena, "resources/models/box_room/BoxRoom.gltf");
     }
 
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_ESCAPE])

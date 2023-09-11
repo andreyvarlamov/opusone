@@ -18,6 +18,8 @@ struct game_state
 
     camera Camera;
     camera_control_scheme CameraControlScheme;
+
+    memory_arena AssetArena;
 };
 
 #endif

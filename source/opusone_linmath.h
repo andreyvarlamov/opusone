@@ -120,6 +120,11 @@ union vec3
         f32 X, Y, Z;
     };
 
+    struct
+    {
+        f32 R, G, B;
+    };
+
     f32 E[3];
 };
 
@@ -261,6 +266,11 @@ union vec4
     struct
     {
         f32 X, Y, Z, W;
+    };
+
+    struct
+    {
+        f32 R, G, B, A;
     };
 
     f32 E[4];
