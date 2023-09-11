@@ -67,6 +67,76 @@ SimpleString(const char *String)
     return Result;
 }
 
+inline simple_string
+GetDirectoryFromPath(const char *Path)
+{
+    simple_string Result {};
+
+    i32 LastSlashIndex = -1;
+    for (u32 StringIndex = 0;
+         StringIndex < (Result.BufferSize - 1);
+         ++StringIndex)
+    {
+        if (Path[StringIndex] == '\0')
+        {
+            break;
+        }
+        if (Path[StringIndex] == '/')
+        {
+            LastSlashIndex = StringIndex;
+        }
+
+        Result.D[StringIndex] = Path[StringIndex];
+        Result.Length++;
+    }
+
+    if (LastSlashIndex != -1)
+    {
+        Result.Length = LastSlashIndex + 1;
+    }
+
+    Result.D[Result.Length] = '\0';
+
+    return Result;
+}
+
+inline simple_string
+CatStrings(const char *A, const char *B)
+{
+    simple_string Result {};
+
+    u32 StringIndex = 0;
+    for (StringIndex;
+         StringIndex < (Result.BufferSize - 1);
+         ++StringIndex)
+    {
+        if (A[StringIndex] == '\0')
+        {
+            break;
+        }
+
+        Result.D[StringIndex] = A[StringIndex];
+        Result.Length++;
+    }
+
+    for (u32 BIndex = 0;
+         StringIndex < (Result.BufferSize - 1);
+         ++BIndex, ++StringIndex)
+    {
+        if (B[BIndex] == '\0')
+        {
+            break;
+        }
+
+        Result.D[StringIndex] = B[BIndex];
+        Result.Length++;
+    }
+
+    Result.D[Result.Length] = '\0';
+
+    return Result;
+}
+
 struct memory_arena
 {
     size_t Size;

@@ -34,7 +34,7 @@ main(int Argc, char *Argv[])
     game_input GameInput = {};
     game_memory GameMemory = {};
     GameMemory.StorageSize = Megabytes(64);
-    GameMemory.Storage = malloc(GameMemory.StorageSize);
+    GameMemory.Storage = calloc(1, GameMemory.StorageSize);
     Assert(GameMemory.Storage);
 
     SDL_GetWindowSize(Window, &GameInput.ScreenWidth, &GameInput.ScreenHeight);
