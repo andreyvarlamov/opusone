@@ -36,7 +36,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         size_t AssetArenaSize = Megabytes(4);
         GameState->AssetArena = MemoryArena(AssetArenaBase, AssetArenaSize);
 
-        imported_model *Model = Assimp_LoadModel(&GameState->AssetArena, "resources/models/box_room/BoxRoom.gltf");
+        imported_model *Model = Assimp_LoadModel(&GameState->AssetArena, "resources/models/adam/adam.gltf");
     }
 
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_ESCAPE])

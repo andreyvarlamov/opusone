@@ -1,5 +1,5 @@
 #ifndef OPUSONE_COMMON_H
-#define  OPUSONE_COMMON_H
+#define OPUSONE_COMMON_H
 
 #include <stdint.h>
 
@@ -137,11 +137,30 @@ CatStrings(const char *A, const char *B)
     return Result;
 }
 
+inline b32
+CompareStrings(const char *A, const char *B)
+{
+    u32 Index = 0;
+    
+    while (A[Index] != '\0' && B[Index] != '\0')
+    {
+        if (A[Index] != B[Index])
+        {
+            return false;
+        }
+        
+        Index++;
+    }
+
+    return true;
+}
+
 struct memory_arena
 {
     size_t Size;
     u8 *Base;
     size_t Used;
+    size_t PrevUsed;
 };
 
 inline memory_arena
@@ -156,7 +175,7 @@ MemoryArena(u8 *Base, size_t Size)
 }
 
 inline void *
-PushSize_(memory_arena *Arena, size_t Size)
+MemoryArena_PushSize_(memory_arena *Arena, size_t Size)
 {
     Assert((Arena->Used + Size) <= Arena->Size);
     void *Result = Arena->Base + Arena->Used;
@@ -164,8 +183,26 @@ PushSize_(memory_arena *Arena, size_t Size)
     return Result;
 }
 
-#define PushStruct(Arena, type) (type *) PushSize_(Arena, sizeof(type))
-#define PushArray(Arena, Count, type) (type *) PushSize_(Arena, Count * sizeof(type))
-#define PushSize(Arena, Size) PushSize_(Arena, Size)
+#define MemoryArena_PushStruct(Arena, type) (type *) MemoryArena_PushSize_(Arena, sizeof(type))
+#define MemoryArena_PushArray(Arena, Count, type) (type *) MemoryArena_PushSize_(Arena, Count * sizeof(type))
+#define MemoryArena_PushSize(Arena, Size) MemoryArena_PushSize_(Arena, Size)
+
+inline void
+MemoryArena_Freeze(memory_arena *Arena)
+{
+    if (Arena->PrevUsed == 0)
+    {
+        Arena->PrevUsed = Arena->Used;
+    }
+}
+
+inline void
+MemoryArena_Unfreeze(memory_arena *Arena)
+{
+    if (Arena->PrevUsed != 0)
+    {
+        Arena->Used = Arena->PrevUsed;
+    }
+}
 
 #endif
