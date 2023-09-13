@@ -1,0 +1,13 @@
+# Blender 3.4.1 MTL File: 'NORMALS_STUDY.blend'
+# www.blender.org
+
+newmtl Material
+Ns 1000.000000
+Ka 1.000000 1.000000 1.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd container.png
+map_Ks container_specular.png
+map_Ke container_emission.png
+map_Bump container_normal.png

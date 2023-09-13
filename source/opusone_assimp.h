@@ -71,26 +71,38 @@ struct imported_armature
     imported_bone *Bones;
 };
 
-struct imported_animation_key
+struct imported_animation_channel
 {
-    vec3 Position;
-    quat Rotation;
+    u32 BoneID;
+    
+    u32 PositionKeyCount;
+    u32 RotationKeyCount;
+    u32 ScaleKeyCount;
+
+    vec3 *PositionKeys;
+    quat *RotationKeys;
+    vec3 *ScaleKeys;
+
+    f64 *PositionKeyTimes;
+    f64 *RotationKeyTimes;
+    f64 *ScaleKeyTimes;
+
     // TODO: Process scaling in animations? As I understand it's not commonly used
     // because it makes it less efficient to recalculate normals and the whole tangent space.
     // I have to do transpose(inverse(Model * boneTransform)) for every vertex, instead of
     // calculating normalMatrix = transpose(inverse(Model)) on CPU and only once per set vertices, then doing
     // normalMatrix * mat3(boneTransform) -- mat3 removing the translation component, and only keeping rotation (already no scaling).
     // But maybe it's not a big deal, and maybe it's not true that scaling is not commonly used. Not sure where I heard that from.
-    // vec3 Scale;
 };
 
 struct imported_animation
 {
-    u32 KeyCount;
     u32 ChannelCount;
-    f32 *KeyTimes;
-    imported_animation_key *Keys;
+    imported_animation_channel *Channels;
 
+    f64 TicksDuration;
+    f64 TicksPerSecond;
+    
     simple_string AnimationName;
 };
 
@@ -118,6 +130,19 @@ Assimp_ConvertVec3F(aiVector3D AssimpVec)
 {
     vec3 Vec { AssimpVec.x, AssimpVec.y, AssimpVec.z };
     return Vec;
+}
+
+internal inline quat
+Assimp_ConvertQuatF(aiQuaternion AssimpQuat)
+{
+    quat Quat {};
+    
+    Quat.W = AssimpQuat.w;
+    Quat.X = AssimpQuat.x;
+    Quat.Y = AssimpQuat.y;
+    Quat.Z = AssimpQuat.z;
+    
+    return Quat;
 }
 
 internal inline vec4
@@ -182,7 +207,6 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
     //
     if (AssimpScene->mNumMaterials > 0)
     {
-        simple_string TestSimpleString = SimpleString("Hello World!");
         simple_string ModelPath = GetDirectoryFromPath(Path);
         
         Model->MaterialCount = AssimpScene->mNumMaterials + 1; // Material Index 0 -> No Material
@@ -199,8 +223,8 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
              MaterialIndex < Model->MaterialCount;
              ++MaterialIndex)
         {
-            imported_material *Material = Model->Materials + MaterialIndex;
             aiMaterial *AssimpMaterial = AssimpScene->mMaterials[MaterialIndex-1];
+            imported_material *Material = Model->Materials + MaterialIndex;
 
             aiTextureType TextureTypes[] = { 
                 aiTextureType_DIFFUSE,
@@ -213,6 +237,9 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
                  TextureType < TEXTURE_TYPE_COUNT;
                  ++TextureType)
             {
+                Material->TexturePaths[TextureType].Length = 0;
+                Material->TexturePaths[TextureType].D[0] = '\0';
+                
                 if (aiGetMaterialTextureCount(AssimpMaterial, TextureTypes[TextureType]) > 0)
                 {
                     aiString AssimpTextureFilename;
@@ -232,6 +259,7 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
     else
     {
         Model->MaterialCount = 0;
+        Model->Materials = 0;
     }
 
     //
@@ -310,12 +338,12 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
     //
     Model->MeshCount = AssimpScene->mNumMeshes;
     Model->Meshes = MemoryArena_PushArray(AssetArena, Model->MeshCount, imported_mesh);
+    Assert(Model->MeshCount > 0); // TODO: Handle mesh count 0 for shipping code -> just abort loading the model
     for (u32 MeshIndex = 0;
          MeshIndex < Model->MeshCount;
          ++MeshIndex)
     {
         aiMesh *AssimpMesh = AssimpScene->mMeshes[MeshIndex];
-
         imported_mesh *Mesh = &Model->Meshes[MeshIndex];
 
         //
@@ -452,10 +480,102 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
                 }
             }
         }
+        else
+        {
+            Mesh->VertexBoneData = 0;
+        }
 
         //
         // NOTE: Parse animations
         //
+        if (Model->Armature && (AssimpScene->mNumAnimations > 0))
+        {
+            Model->AnimationCount = AssimpScene->mNumAnimations;
+            Model->Animations = MemoryArena_PushArray(AssetArena, Model->AnimationCount, imported_animation);
+            for (u32 AnimationIndex = 0;
+                 AnimationIndex < Model->AnimationCount;
+                 ++AnimationIndex)
+            {
+                aiAnimation *AssimpAnimation = AssimpScene->mAnimations[AnimationIndex];
+                imported_animation *Animation = Model->Animations + AnimationIndex;
+
+                Animation->ChannelCount = AssimpAnimation->mNumChannels;
+                Animation->Channels = MemoryArena_PushArray(AssetArena, Animation->ChannelCount, imported_animation_channel);
+                Animation->TicksDuration = AssimpAnimation->mDuration;
+                Animation->TicksPerSecond = AssimpAnimation->mTicksPerSecond;
+                Animation->AnimationName = SimpleString(AssimpAnimation->mName.C_Str());
+                for (u32 ChannelIndex = 0;
+                     ChannelIndex < Animation->ChannelCount;
+                     ++ChannelIndex)
+                {
+                    aiNodeAnim *AssimpChannel = AssimpAnimation->mChannels[ChannelIndex];
+                    imported_animation_channel *Channel = Animation->Channels + ChannelIndex;
+
+                    for (u32 BoneSearchIndex = 1;
+                         BoneSearchIndex < Model->Armature->BoneCount;
+                         ++BoneSearchIndex)
+                    {
+                        if (CompareStrings(Model->Armature->Bones[BoneSearchIndex].BoneName.D, AssimpChannel->mNodeName.C_Str()))
+                        {
+                            Channel->BoneID = BoneSearchIndex;
+                            break;
+                        }
+                    }
+                    Assert(Channel->BoneID > 0);
+                    
+                    Channel->PositionKeyCount = AssimpChannel->mNumPositionKeys;
+                    Channel->PositionKeys = MemoryArena_PushArray(AssetArena, Channel->PositionKeyCount, vec3);
+                    Channel->PositionKeyTimes = MemoryArena_PushArray(AssetArena, Channel->PositionKeyCount, f64);
+                    for (u32 PositionKeyIndex = 0;
+                         PositionKeyIndex < Channel->PositionKeyCount;
+                         ++PositionKeyIndex)
+                    {
+                        aiVectorKey *AssimpPositionKey = AssimpChannel->mPositionKeys + PositionKeyIndex;
+                        f64 *PositionKeyTime = Channel->PositionKeyTimes + PositionKeyIndex;
+                        vec3 *PositionKey = Channel->PositionKeys + PositionKeyIndex;
+
+                        *PositionKeyTime = AssimpPositionKey->mTime;
+                        *PositionKey = Assimp_ConvertVec3F(AssimpPositionKey->mValue);
+                    }
+
+                    Channel->RotationKeyCount = AssimpChannel->mNumRotationKeys;
+                    Channel->RotationKeys = MemoryArena_PushArray(AssetArena, Channel->RotationKeyCount, quat);
+                    Channel->RotationKeyTimes = MemoryArena_PushArray(AssetArena, Channel->RotationKeyCount, f64);
+                    for (u32 RotationKeyIndex = 0;
+                         RotationKeyIndex < Channel->RotationKeyCount;
+                         ++RotationKeyIndex)
+                    {
+                        aiQuatKey *AssimpRotationKey = AssimpChannel->mRotationKeys + RotationKeyIndex;
+                        f64 *RotationKeyTime = Channel->RotationKeyTimes + RotationKeyIndex;
+                        quat *RotationKey = Channel->RotationKeys + RotationKeyIndex;
+
+                        *RotationKeyTime = AssimpRotationKey->mTime;
+                        *RotationKey = Assimp_ConvertQuatF(AssimpRotationKey->mValue);
+                    }
+
+                    Channel->ScaleKeyCount = AssimpChannel->mNumScalingKeys;
+                    Channel->ScaleKeys = MemoryArena_PushArray(AssetArena, Channel->ScaleKeyCount, vec3);
+                    Channel->ScaleKeyTimes = MemoryArena_PushArray(AssetArena, Channel->ScaleKeyCount, f64);
+                    for (u32 ScaleKeyIndex = 0;
+                         ScaleKeyIndex < Channel->ScaleKeyCount;
+                         ++ScaleKeyIndex)
+                    {
+                        aiVectorKey *AssimpScaleKey = AssimpChannel->mScalingKeys + ScaleKeyIndex;
+                        f64 *ScaleKeyTime = Channel->ScaleKeyTimes + ScaleKeyIndex;
+                        vec3 *ScaleKey = Channel->ScaleKeys + ScaleKeyIndex;
+
+                        *ScaleKeyTime = AssimpScaleKey->mTime;
+                        *ScaleKey = Assimp_ConvertVec3F(AssimpScaleKey->mValue);
+                    }
+                }
+            }
+        }
+        else
+        {
+            Model->Animations = 0;
+            Model->AnimationCount = 0;
+        }
+
         Noop;
     }
 

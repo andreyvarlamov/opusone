@@ -202,6 +202,7 @@ MemoryArena_Unfreeze(memory_arena *Arena)
     if (Arena->PrevUsed != 0)
     {
         Arena->Used = Arena->PrevUsed;
+        Arena->PrevUsed = 0;
     }
 }
 

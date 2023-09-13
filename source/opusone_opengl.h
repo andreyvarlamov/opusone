@@ -203,7 +203,10 @@ OpenGL_SubVertexData(u32 VBO, size_t *AttribMaxBytes, size_t *AttribUsedBytes, v
          AttribIndex < AttribCount;
          ++AttribIndex)
     {
-        glBufferSubData(GL_ARRAY_BUFFER, Offset, AttribUsedBytes[AttribIndex], AttribData[AttribIndex]);
+        if (AttribData[AttribIndex])
+        {
+            glBufferSubData(GL_ARRAY_BUFFER, Offset, AttribUsedBytes[AttribIndex], AttribData[AttribIndex]);
+        }
         Offset += AttribMaxBytes[AttribIndex];
     }
 
@@ -215,6 +218,28 @@ OpenGL_SubVertexData(u32 VBO, size_t *AttribMaxBytes, size_t *AttribUsedBytes, v
         glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, IndicesUsedBytes, IndicesData);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
+}
+
+u32
+OpenGL_LoadTexture(u8 *ImageData, u32 Width, u32 Height, u32 Pitch, u32 BytesPerPixel)
+{
+    // TODO: Handle different image data formats better
+    Assert(Width * BytesPerPixel == Pitch);
+    Assert(BytesPerPixel == 4);
+    
+    u32 TextureID;
+
+    glGenTextures(1, &TextureID);
+    glBindTexture(GL_TEXTURE_2D, TextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, ImageData);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return TextureID;
 }
 
 #endif

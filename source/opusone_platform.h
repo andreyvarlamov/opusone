@@ -30,6 +30,16 @@ struct game_memory
     void *Storage;
 };
 
+struct platform_load_image_result
+{
+    u32 Width;
+    u32 Height;
+    u32 Pitch;
+    u32 BytesPerPixel;
+    u8 *ImageData;
+    void *PointerToFree_;
+};
+
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameShouldQuit);
 
@@ -41,5 +51,11 @@ PlatformReadFile(const char *FilePath);
 
 void
 PlatformFree(void *Memory);
+
+platform_load_image_result
+PlatformLoadImage(const char *ImagePath);
+
+void
+PlatformFreeImage(platform_load_image_result *PlatformLoadImageResult);
 
 #endif

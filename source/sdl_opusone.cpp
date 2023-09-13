@@ -3,6 +3,7 @@
 
 #include <glad/glad.h>
 #include <sdl2/SDL.h>
+#include <sdl2/SDL_image.h>
 
 #include "opusone_common.h"
 #include "opusone_platform.h"
@@ -30,6 +31,9 @@ main(int Argc, char *Argv[])
     printf("Vendor: %s\n", glGetString(GL_VENDOR));
     printf("Renderer: %s\n", glGetString(GL_RENDERER));
     printf("Version: %s\n", glGetString(GL_VERSION));
+
+    i32 SDLImageFlags = IMG_INIT_JPG | IMG_INIT_PNG;
+    Assert((IMG_Init(SDLImageFlags) & SDLImageFlags));
 
     game_input GameInput = {};
     game_memory GameMemory = {};
@@ -117,4 +121,32 @@ void
 PlatformFree(void *Memory)
 {
     free(Memory);
+}
+
+platform_load_image_result
+PlatformLoadImage(const char *ImagePath)
+{
+    // TODO: JPG and PNG only for now, BMPs have to be handled separately
+    SDL_Surface *ImageSurface = IMG_Load(ImagePath);
+    // TODO: Handle errors opening images properly
+    Assert(ImageSurface);
+
+    platform_load_image_result Result {};
+
+    Result.Width = (u32) ImageSurface->w;
+    Result.Height = (u32) ImageSurface->h;
+    Result.Pitch = (u32) ImageSurface->pitch;
+    Result.BytesPerPixel = (u32) ImageSurface->format->BytesPerPixel;
+    Result.ImageData = (u8 *) ImageSurface->pixels;
+    Result.PointerToFree_ = (void *) ImageSurface;
+
+    return Result;
+}
+
+void
+PlatformFreeImage(platform_load_image_result *PlatformLoadImageResult)
+{
+    SDL_FreeSurface((SDL_Surface *) PlatformLoadImageResult->PointerToFree_);
+    PlatformLoadImageResult->ImageData = 0;
+    PlatformLoadImageResult->PointerToFree_ = 0;
 }

@@ -6,6 +6,15 @@
 #include "opusone_linmath.h"
 #include "opusone_camera.h"
 
+struct model_render_data
+{
+    u32 VAO;
+    u32 VBO;
+    u32 EBO;
+    u32 IndexCount;
+    u32 TextureIDs[4];
+};
+
 struct game_state
 {
     u32 Shader;
@@ -13,6 +22,8 @@ struct game_state
     u32 VBO;
     u32 EBO;
     u32 IndexCount;
+
+    model_render_data Model;
 
     f32 Angle;
 
