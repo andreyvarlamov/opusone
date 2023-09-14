@@ -185,7 +185,14 @@ MemoryArena_PushSize_(memory_arena *Arena, size_t Size)
 
 #define MemoryArena_PushStruct(Arena, type) (type *) MemoryArena_PushSize_(Arena, sizeof(type))
 #define MemoryArena_PushArray(Arena, Count, type) (type *) MemoryArena_PushSize_(Arena, Count * sizeof(type))
-#define MemoryArena_PushSize(Arena, Size) MemoryArena_PushSize_(Arena, Size)
+#define MemoryArena_PushBytes(Arena, ByteCount) (u8 *) MemoryArena_PushSize_(Arena, ByteCount)
+
+inline memory_arena
+MemoryArenaNested(memory_arena *Arena, size_t Size)
+{
+    memory_arena NewArena = MemoryArena(MemoryArena_PushBytes(Arena, Size), Size);
+    return NewArena;
+}
 
 inline void
 MemoryArena_Freeze(memory_arena *Arena)

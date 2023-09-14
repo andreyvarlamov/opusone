@@ -6,6 +6,12 @@
 
 #include "opusone_common.h"
 
+struct vertex_attrib_spec
+{
+    size_t Stride;
+    u8 ComponentCount;
+};
+
 internal u32
 CompileShaderFromPath_(const char *Path, u32 ShaderType)
 {
@@ -135,13 +141,12 @@ OpenGL_SetUniformMat4F(u32 ShaderID, const char *UniformName, f32 *Value, b32 Us
 }
 
 void
-OpenGL_PrepareVertexData(u32 VertexCount, size_t *AttribStrides, u32 *AttribComponentCounts, u32 AttribCount,
+OpenGL_PrepareVertexData(u32 VertexCount, vertex_attrib_spec *AttribSpecs, u32 AttribCount,
                          u32 IndexCount, size_t IndexSize, b32 IsDynamicDraw,
                          u32 *Out_VAO, u32 *Out_VBO, u32 *Out_EBO)
 {
     Assert(Out_VAO);
-    Assert(AttribStrides);
-    Assert(AttribComponentCounts);
+    Assert(AttribSpecs);
     Assert(AttribCount > 0);
     Assert(VertexCount > 0);
 
@@ -155,19 +160,19 @@ OpenGL_PrepareVertexData(u32 VertexCount, size_t *AttribStrides, u32 *AttribComp
     size_t TotalVertexSize = 0;
     for (u32 AttribIndex = 0; AttribIndex < AttribCount; ++AttribIndex)
     {
-        TotalVertexSize += AttribStrides[AttribIndex];
+        TotalVertexSize += AttribSpecs[AttribIndex].Stride;
     }
     
     glBufferData(GL_ARRAY_BUFFER, TotalVertexSize * VertexCount, 0, (IsDynamicDraw ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW));
     for (u32 AttribIndex = 0; AttribIndex < AttribCount; ++AttribIndex)
     {
-        size_t StrideSize = AttribStrides[AttribIndex];
+        size_t StrideSize = AttribSpecs[AttribIndex].Stride;
         size_t OffsetSize = 0;
         for (u32 Index = 0; Index < AttribIndex; ++Index)
         {
-            OffsetSize += AttribStrides[Index] * VertexCount;
+            OffsetSize += AttribSpecs[Index].Stride * VertexCount;
         }
-        glVertexAttribPointer(AttribIndex, AttribComponentCounts[AttribIndex], GL_FLOAT, GL_FALSE,
+        glVertexAttribPointer(AttribIndex, AttribSpecs[AttribIndex].ComponentCount, GL_FLOAT, GL_FALSE,
                               (GLsizei) StrideSize, (void *) OffsetSize);
         glEnableVertexAttribArray(AttribIndex);
     }
@@ -183,6 +188,38 @@ OpenGL_PrepareVertexData(u32 VertexCount, size_t *AttribStrides, u32 *AttribComp
         Assert(EBO);
         if (Out_EBO) *Out_EBO = EBO;
     }
+}
+
+void
+OpenGL_PrepareVertexData(render_unit *RenderUnit, vertex_attrib_spec *AttribSpecs, u32 AttribCount, b32 IsDynamicDraw)
+{
+    Assert(RenderUnit);
+
+    OpenGL_PrepareVertexData(RenderUnit->MaxVertexCount, AttribSpecs, AttribCount,
+                             RenderUnit->MaxIndexCount, sizeof(i32), IsDynamicDraw,
+                             &RenderUnit->VAO, &RenderUnit->VBO, &RenderUnit->EBO);
+}
+
+void OpenGL_SubVertexAttribData(u32 VBO, size_t Offset, size_t SizeToCopy, void *Data, b32 Rebind, b32 Unbind)
+{
+    Assert(VBO);
+
+    if (Rebind)
+    {
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    }
+
+    /* glBufferSubData(); */
+
+    if (Unbind)
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+}
+
+void OpenGL_SubVertexIndexData(u32 EBO, size_t SizeToCopy, void *Data)
+{
 }
 
 void
