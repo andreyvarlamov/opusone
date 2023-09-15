@@ -46,7 +46,7 @@ struct imported_mesh
 {
     u32 VertexCount;
     u32 IndexCount;
-    u32 MaterialIndex;
+    u32 MaterialID;
     
     vec3 *VertexPositions;
     vec3 *VertexTangents;

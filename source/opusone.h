@@ -14,25 +14,6 @@ struct world_object
     vec3 Scale;
 };
 
-#define VERTICES_PER_RENDER_UNIT 32768
-#define INDICES_PER_RENDER_UNIT 131072
-struct render_unit
-{
-    u32 VAO;
-    u32 VBO;
-    u32 EBO;
-
-    u32 VertexCount;
-    u32 MaxVertexCount;
-    
-    u32 IndexCount;
-    u32 MaxIndexCount;
-
-    u32 VertexSpecID;
-
-    render_unit *Next;
-};
-
 struct render_data_material
 {
     u32 TextureIDs[TEXTURE_TYPE_COUNT];
@@ -40,13 +21,34 @@ struct render_data_material
 
 struct render_data_mesh
 {
-    u32 RenderUnitID;
-    u32 MaterialID;
-
-    world_object *WorldObjectPtrs[16];
-    
     u32 StartingIndex;
     u32 IndexCount;
+
+    u32 MaterialID;
+
+    // TODO: How to make this dynamic, so I can render more instances of this mesh?
+    u32 WorldObjectCount;
+    world_object **WorldObjectPtrs;
+};
+
+struct render_unit
+{
+    u32 VAO;
+    u32 VBO;
+    u32 EBO;
+
+    u32 VertexCount;
+    u32 IndexCount;
+
+    // TODO: How to make this dynamic, so I can add more materials and meshes
+    // if there's space for vertices/indices on GPU?
+    u32 MaterialCount;
+    render_data_material *Materials;
+
+    u32 MeshCount;
+    render_data_mesh *Meshes;
+
+    render_unit *Next;
 };
 
 struct game_state
@@ -63,13 +65,7 @@ struct game_state
     u32 WorldObjectCount;
     world_object *WorldObjects;
 
-    render_unit *FirstRenderUnit;
-
-    u32 MaterialCount;
-    render_data_material *Materials;
-    
-    u32 MeshCount;
-    render_data_mesh *Meshes;
+    render_unit RenderUnit;
     
     u32 ImportedModelCount;
     imported_model **ImportedModels;

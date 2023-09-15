@@ -11,56 +11,43 @@
 #include <cstdio>
 #include <glad/glad.h>
 
-inline render_unit *
-GetSufficientRenderUnit(game_state *GameState, memory_arena *Arena, u32 VertexCount, u32 IndexCount)
+#if 0
+inline void
+RenderRenderUnit(render_unit *RenderUnit)
 {
-    Assert(VertexCount < VERTICES_PER_RENDER_UNIT);
-    Assert(IndexCount < INDICES_PER_RENDER_UNIT);
+    // Bind VAO
+
+    // Meshes should be ordered by starting index in the render unit's VAO.
+    // Meshes that use the same material IDs should be contiguous.
+
+    u32 PreviousMaterialID = 0;
     
-    render_unit *RenderUnit = GameState->FirstRenderUnit;
-    render_unit *PrevRenderUnit = 0;
-
-    while (RenderUnit)
+    for (u32 MeshIndex = 0;
+         MeshIndex < RenderUnit->MeshCount;
+         ++MeshIndex)
     {
-        if (((RenderUnit->VertexCount + VertexCount) < RenderUnit->MaxVertexCount) &&
-            ((RenderUnit->IndexCount + IndexCount) < RenderUnit->MaxIndexCount))
+        render_data_mesh *RenderMesh = RenderUnit->Meshes = MeshIndex;
+        if (RenderMesh->MaterialID != PreviousMaterialID)
         {
-            break;
+            // Bind textures for material
+
+            PreviousMaterialID = RenderMesh->MaterialID;
         }
 
-        PrevRenderUnit = RenderUnit;
-        RenderUnit = RenderUnit->Next;
-    }
-
-    if (!RenderUnit)
-    {
-        // TODO: Allocate render unit
-        RenderUnit = MemoryArena_PushStruct(Arena, render_unit);
-        RenderUnit->VAO = 0;
-        RenderUnit->VBO = 0;
-        RenderUnit->EBO = 0;
-        RenderUnit->VertexCount = 0;
-        RenderUnit->MaxVertexCount = VERTICES_PER_RENDER_UNIT;
-        RenderUnit->IndexCount = 0;
-        RenderUnit->MaxIndexCount = INDICES_PER_RENDER_UNIT;
-        if (PrevRenderUnit)
+        for (u32 WorldObjectIndex = 0;
+             WorldObjectIndex < RenderMesh->WorldObjectCount;
+             ++WorldObjectIndex)
         {
-            PrevRenderUnit->Next = RenderUnit;
+            world_object *WorldObject = RenderMesh->WorldObjectPtrs[WorldObjectIndex];
+            mat4 LocalToWorld = GetLocalToWorldTransform(WorldObject);
+
+            // Set shader uniform to the LocalToWorld
+
+            // glDrawArrays(from RenderMesh->StartingIndex for RenderMesh->IndexCount)
         }
-
-        vertex_attrib_spec AttribSpecs[] = {
-            vertex_attrib_spec { sizeof(vec3), 3 }, // Position
-            vertex_attrib_spec { sizeof(vec3), 3 }, // Tangent
-            vertex_attrib_spec { sizeof(vec3), 3 }, // Bitangent
-            vertex_attrib_spec { sizeof(vec3), 3 }, // Normal
-            vertex_attrib_spec { sizeof(vec4), 4 }, // Color
-            vertex_attrib_spec { sizeof(vec2), 2 }  // UV
-        };
-        OpenGL_PrepareVertexData(RenderUnit, AttribSpecs, ArrayCount(AttribSpecs), false);
     }
-
-    return RenderUnit;
 }
+#endif
 
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameShouldQuit)
@@ -107,22 +94,52 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         //
         // NOTE: Calculate how much space to allocate for render data
         //
-        GameState->MaterialCount = 0;
-        GameState->MeshCount = 0;
+        GameState->RenderUnit.VertexCount = 0;
+        GameState->RenderUnit.IndexCount = 0;
+        GameState->RenderUnit.MaterialCount = 0;
+        GameState->RenderUnit.MeshCount = 0;
+        
         for (u32 ModelIndex = 0;
              ModelIndex < GameState->ImportedModelCount;
              ++ModelIndex)
         {
             imported_model *ImportedModel = GameState->ImportedModels[ModelIndex];
-            GameState->MaterialCount += ImportedModel->MaterialCount;
-            GameState->MeshCount += ImportedModel->MeshCount;
+            
+            GameState->RenderUnit.MaterialCount += ImportedModel->MaterialCount;
+            GameState->RenderUnit.MeshCount += ImportedModel->MeshCount;
+
+            for (u32 MeshIndex = 0;
+                 MeshIndex < ImportedModel->MeshCount;
+                 ++MeshIndex)
+            {
+                imported_mesh *ImportedMesh = ImportedModel->Meshes + MeshIndex;
+
+                GameState->RenderUnit.VertexCount += ImportedMesh->VertexCount;
+                GameState->RenderUnit.IndexCount += ImportedMesh->IndexCount;
+            }
+                     
         }
-        GameState->Materials = MemoryArena_PushArray(&GameState->RenderArena, GameState->MaterialCount, render_data_material);
-        GameState->Meshes = MemoryArena_PushArray(&GameState->RenderArena, GameState->MeshCount, render_data_mesh);
 
         //
-        // NOTE: Load materials and vertex data to GPU
+        // NOTE: Initialize render unit
         //
+        vertex_attrib_spec AttribSpecs[] = {
+            vertex_attrib_spec { sizeof(vec3), 3 }, // Position
+            vertex_attrib_spec { sizeof(vec3), 3 }, // Tangent
+            vertex_attrib_spec { sizeof(vec3), 3 }, // Bitangent
+            vertex_attrib_spec { sizeof(vec3), 3 }, // Normal
+            vertex_attrib_spec { sizeof(vec4), 4 }, // Color
+            vertex_attrib_spec { sizeof(vec2), 2 }  // UV
+        };
+        GameState->RenderUnit.Materials = MemoryArena_PushArray(&GameState->RenderArena, GameState->RenderUnit.MaterialCount, render_data_material);
+        GameState->RenderUnit.Meshes = MemoryArena_PushArray(&GameState->RenderArena, GameState->RenderUnit.MeshCount, render_data_mesh);
+        OpenGL_PrepareVertexData(&GameState->RenderUnit, AttribSpecs, ArrayCount(AttribSpecs), false);
+
+        // TODO: How to make this actually dynamic? (Do I even need to though?)
+        u32 WorldObjectSlotsPerRenderMesh = 16;
+
+        u32 BaseRenderMaterialForModel = 0;
+        u32 BaseRenderMeshForModel = 0;
         for (u32 ModelIndex = 0;
              ModelIndex < GameState->ImportedModelCount;
              ++ModelIndex)
@@ -134,7 +151,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                  ++MaterialIndex)
             {
                 imported_material *ImportedMaterial = ImportedModel->Materials + MaterialIndex;
-                render_data_material *Material = GameState->Materials + MaterialIndex;
+                render_data_material *Material = GameState->RenderUnit.Materials + BaseRenderMaterialForModel + MaterialIndex;
                 
                 for (u32 TexturePathIndex = 0;
                      TexturePathIndex < TEXTURE_TYPE_COUNT;
@@ -160,90 +177,46 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                  ++MeshIndex)
             {
                 imported_mesh *ImportedMesh = ImportedModel->Meshes + MeshIndex;
+                
+                render_data_mesh *RenderMesh = GameState->RenderUnit.Meshes + BaseRenderMeshForModel + MeshIndex;
 
-                render_unit *RenderUnit =
-                    GetSufficientRenderUnit(GameState, &GameState->RenderArena, ImportedMesh->VertexCount, ImportedMesh->IndexCount);
-
-                // TODO: Sub data at the sufficient render unit
-
-                /*
-                  struct imported_mesh
-                  {
-                  u32 VertexCount;
-                  u32 IndexCount;
-                  u32 MaterialIndex;
-    
-                  vec3 *VertexPositions;
-                  vec3 *VertexTangents;
-                  vec3 *VertexBitangents;
-                  vec3 *VertexNormals;
-                  vec4 *VertexColors;
-                  vec2 *VertexUVs;
-
-                  vertex_bone_data *VertexBoneData;
-    
-                  i32 *Indices;
-                  };
-                */
-            }
-        }
-
-        #if 0
-        {
-            imported_mesh *Mesh = GameState->Room.ImportedModel->Meshes;
-            size_t AttribStrides[] = { sizeof(vec3), sizeof(vec3), sizeof(vec3), sizeof(vec3), sizeof(vec4), sizeof(vec2) };
-            u32 AttribComponentCounts[] = { 3, 3, 3, 3, 3, 2 };
-            OpenGL_PrepareVertexData(Mesh->VertexCount, AttribStrides, AttribComponentCounts, ArrayCount(AttribStrides),
-                                     Mesh->IndexCount, sizeof(i32), false,
-                                     &GameState->Room.VAO, &GameState->Room.VBO, &GameState->Room.EBO);
-
-            size_t AttribMaxBytes[6] = {};
-            size_t AttribUsedBytes[6] = {};
-            for (u32 AttribIndex = 0;
-                 AttribIndex < 6;
-                 ++AttribIndex)
-            {
-                AttribUsedBytes[AttribIndex] = AttribStrides[AttribIndex] * Mesh->VertexCount;
-                AttribMaxBytes[AttribIndex] = AttribUsedBytes[AttribIndex];
-            }
-            void *AttribData[] = {
-                Mesh->VertexPositions, Mesh->VertexTangents, Mesh->VertexBitangents,
-                Mesh->VertexNormals, Mesh->VertexColors, Mesh->VertexUVs
-            };
-            
-            size_t IndicesUsedBytes = Mesh->IndexCount * sizeof(i32);
-
-            OpenGL_SubVertexData(GameState->Room.VBO, AttribMaxBytes, AttribUsedBytes, AttribData, ArrayCount(AttribData),
-                                 GameState->Room.EBO, IndicesUsedBytes, Mesh->Indices);
-            
-            GameState->Room.IndexCount = Mesh->IndexCount;
-        }
-        
-        for (u32 MaterialIndex = 1;
-             MaterialIndex < GameState->Room.ImportedModel->MaterialCount;
-             ++MaterialIndex)
-        {
-            imported_material *Material = GameState->Room.ImportedModel->Materials + MaterialIndex;
-
-            for (u32 TexturePathIndex = 0;
-                 TexturePathIndex < TEXTURE_TYPE_COUNT;
-                 ++TexturePathIndex)
-            {
-                simple_string Path = Material->TexturePaths[TexturePathIndex];
-                if (Path.Length > 0)
+                RenderMesh->StartingIndex = GameState->RenderUnit.IndexCount;
+                RenderMesh->IndexCount = ImportedMesh->IndexCount;
+                
+                // TODO: Sub data into the VAO and find out starting index and index count
+#if 0
                 {
-                    platform_load_image_result LoadImageResult = PlatformLoadImage(Path.D);
+                    size_t AttribMaxBytes[6] = {};
+                    size_t AttribUsedBytes[6] = {};
+                    for (u32 AttribIndex = 0;
+                         AttribIndex < 6;
+                         ++AttribIndex)
+                    {
+                        AttribUsedBytes[AttribIndex] = AttribStrides[AttribIndex] * Mesh->VertexCount;
+                        AttribMaxBytes[AttribIndex] = AttribUsedBytes[AttribIndex];
+                    }
+                    void *AttribData[] = {
+                        Mesh->VertexPositions, Mesh->VertexTangents, Mesh->VertexBitangents,
+                        Mesh->VertexNormals, Mesh->VertexColors, Mesh->VertexUVs
+                    };
+            
+                    size_t IndicesUsedBytes = Mesh->IndexCount * sizeof(i32);
 
-                    GameState->Room.TextureIDs[TexturePathIndex] =
-                        OpenGL_LoadTexture(LoadImageResult.ImageData,
-                                           LoadImageResult.Width, LoadImageResult.Height,
-                                           LoadImageResult.Pitch, LoadImageResult.BytesPerPixel);
-
-                    PlatformFreeImage(&LoadImageResult);
+                    OpenGL_SubVertexData(GameState->Room.VBO, AttribMaxBytes, AttribUsedBytes, AttribData, ArrayCount(AttribData),
+                                         GameState->Room.EBO, IndicesUsedBytes, Mesh->Indices);
+            
+                    GameState->Room.IndexCount = Mesh->IndexCount;
                 }
+#endif
+
+                GameState->RenderUnit.VertexCount += ImportedMesh->VertexCount;
+                GameState->RenderUnit.IndexCount += ImportedMesh->IndexCount;
+                RenderMesh->MaterialID = BaseRenderMaterialForModel + ImportedMesh->MaterialID;
             }
+
+            BaseRenderMaterialForModel += ImportedModel->MaterialCount;
+            BaseRenderMeshForModel += ImportedModel->MeshCount;
         }
-        #endif
 
         //
         // NOTE: OpenGL init state

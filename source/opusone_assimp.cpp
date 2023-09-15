@@ -305,11 +305,11 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
         //
         if (Model->MaterialCount > 0)
         {
-            Mesh->MaterialIndex = AssimpMesh->mMaterialIndex + 1;
+            Mesh->MaterialID = AssimpMesh->mMaterialIndex + 1;
         }
         else
         {
-            Mesh->MaterialIndex = 0;
+            Mesh->MaterialID = 0;
         }
 
         //

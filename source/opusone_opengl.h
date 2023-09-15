@@ -195,8 +195,8 @@ OpenGL_PrepareVertexData(render_unit *RenderUnit, vertex_attrib_spec *AttribSpec
 {
     Assert(RenderUnit);
 
-    OpenGL_PrepareVertexData(RenderUnit->MaxVertexCount, AttribSpecs, AttribCount,
-                             RenderUnit->MaxIndexCount, sizeof(i32), IsDynamicDraw,
+    OpenGL_PrepareVertexData(RenderUnit->VertexCount, AttribSpecs, AttribCount,
+                             RenderUnit->IndexCount, sizeof(i32), IsDynamicDraw,
                              &RenderUnit->VAO, &RenderUnit->VBO, &RenderUnit->EBO);
 }
 
