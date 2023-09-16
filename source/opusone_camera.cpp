@@ -207,6 +207,6 @@ GetCameraViewMat(camera *Camera)
 {
     vec3 Front = -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
     vec3 CameraTarget = Camera->Position + Front;
-    mat4 Result = GetViewMat(Camera->Position, CameraTarget, vec3 { 0.0f, 1.0f, 0.0f });
+    mat4 Result = Mat4GetView(Camera->Position, CameraTarget, vec3 { 0.0f, 1.0f, 0.0f });
     return Result;
 }

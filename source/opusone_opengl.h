@@ -6,11 +6,39 @@
 
 #include "opusone_common.h"
 
+enum vertex_attrib_type
+{
+    VERTEX_ATTRIB_TYPE_FLOAT,
+    VERTEX_ATTRIB_TYPE_INT,
+    VERTEX_ATTRIB_TYPE_COUNT
+};
+
 struct vertex_attrib_spec
 {
-    size_t Stride;
+    u8 Stride;
     u8 ComponentCount;
+    vertex_attrib_type Type;
+    size_t ByteOffset;
 };
+
+inline void
+CalculateVertexAttribOffsets(vertex_attrib_spec *AttribSpecs, u32 AttribCount, u32 VertexCount)
+{
+    Assert(AttribSpecs);
+    Assert(AttribCount > 0);
+    Assert(VertexCount > 0);
+    
+    size_t Offset = 0;
+    
+    for (u32 AttribIndex = 0;
+         AttribIndex < AttribCount;
+         ++AttribIndex)
+    {
+        vertex_attrib_spec *Spec = AttribSpecs + AttribIndex;
+        Spec->ByteOffset = Offset;
+        Offset += VertexCount * Spec->Stride;
+    }
+}
 
 internal u32
 CompileShaderFromPath_(const char *Path, u32 ShaderType)
@@ -157,25 +185,38 @@ OpenGL_PrepareVertexData(u32 VertexCount, vertex_attrib_spec *AttribSpecs, u32 A
     u32 VBO;
     glGenBuffers(1, &VBO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
     size_t TotalVertexSize = 0;
-    for (u32 AttribIndex = 0; AttribIndex < AttribCount; ++AttribIndex)
+    for (u32 AttribIndex = 0;
+         AttribIndex < AttribCount;
+         ++AttribIndex)
     {
         TotalVertexSize += AttribSpecs[AttribIndex].Stride;
     }
-    
     glBufferData(GL_ARRAY_BUFFER, TotalVertexSize * VertexCount, 0, (IsDynamicDraw ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW));
-    for (u32 AttribIndex = 0; AttribIndex < AttribCount; ++AttribIndex)
+    
+    for (u32 AttribIndex = 0;
+         AttribIndex < AttribCount;
+         ++AttribIndex)
     {
-        size_t StrideSize = AttribSpecs[AttribIndex].Stride;
-        size_t OffsetSize = 0;
-        for (u32 Index = 0; Index < AttribIndex; ++Index)
+        vertex_attrib_spec *Spec = AttribSpecs + AttribIndex;
+        
+        switch (Spec->Type)
         {
-            OffsetSize += AttribSpecs[Index].Stride * VertexCount;
+            case VERTEX_ATTRIB_TYPE_INT:
+            {
+                glVertexAttribIPointer(AttribIndex, Spec->ComponentCount, GL_INT, (GLsizei) Spec->Stride, (void *) Spec->ByteOffset);
+            } break;
+
+            default:
+            {
+                glVertexAttribPointer(AttribIndex, Spec->ComponentCount, GL_FLOAT, GL_FALSE,
+                                      (GLsizei) Spec->Stride, (void *) Spec->ByteOffset);
+            } break;
         }
-        glVertexAttribPointer(AttribIndex, AttribSpecs[AttribIndex].ComponentCount, GL_FLOAT, GL_FALSE,
-                              (GLsizei) StrideSize, (void *) OffsetSize);
         glEnableVertexAttribArray(AttribIndex);
     }
+    
     Assert(VBO);
     if (Out_VBO) *Out_VBO = VBO;
 
@@ -185,43 +226,13 @@ OpenGL_PrepareVertexData(u32 VertexCount, vertex_attrib_spec *AttribSpecs, u32 A
         glGenBuffers(1, &EBO);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, IndexCount * IndexSize, 0, (IsDynamicDraw ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW));
+
         Assert(EBO);
         if (Out_EBO) *Out_EBO = EBO;
     }
 }
 
-void
-OpenGL_PrepareVertexData(render_unit *RenderUnit, vertex_attrib_spec *AttribSpecs, u32 AttribCount, b32 IsDynamicDraw)
-{
-    Assert(RenderUnit);
-
-    OpenGL_PrepareVertexData(RenderUnit->VertexCount, AttribSpecs, AttribCount,
-                             RenderUnit->IndexCount, sizeof(i32), IsDynamicDraw,
-                             &RenderUnit->VAO, &RenderUnit->VBO, &RenderUnit->EBO);
-}
-
-void OpenGL_SubVertexAttribData(u32 VBO, size_t Offset, size_t SizeToCopy, void *Data, b32 Rebind, b32 Unbind)
-{
-    Assert(VBO);
-
-    if (Rebind)
-    {
-        glBindVertexArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    }
-
-    /* glBufferSubData(); */
-
-    if (Unbind)
-    {
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-    }
-}
-
-void OpenGL_SubVertexIndexData(u32 EBO, size_t SizeToCopy, void *Data)
-{
-}
-
+#if 0
 void
 OpenGL_SubVertexData(u32 VBO, size_t *AttribMaxBytes, size_t *AttribUsedBytes, void **AttribData, u32 AttribCount,
                      u32 EBO, size_t IndicesUsedBytes, void *IndicesData)
@@ -256,6 +267,70 @@ OpenGL_SubVertexData(u32 VBO, size_t *AttribMaxBytes, size_t *AttribUsedBytes, v
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
 }
+#endif
+
+void
+OpenGL_PrepareVertexData(render_unit *RenderUnit,
+                         vertex_attrib_spec *AttribSpecs, u32 AttribCount, b32 IsDynamicDraw)
+{
+    Assert(RenderUnit);
+    Assert(AttribSpecs);
+    Assert(AttribCount > 0);
+
+    OpenGL_PrepareVertexData(RenderUnit->MaxVertexCount, AttribSpecs, AttribCount,
+                             RenderUnit->MaxIndexCount, sizeof(i32), IsDynamicDraw,
+                             &RenderUnit->VAO, &RenderUnit->VBO, &RenderUnit->EBO);
+}
+
+void
+OpenGL_SubVertexData(render_unit *RenderUnit,
+                     void **AttribData, vertex_attrib_spec *AttribSpecs, u32 AttribCount, void *IndicesData,
+                     u32 VertexToSubCount, u32 IndexToSubCount)
+{
+    Assert(RenderUnit);
+    Assert(RenderUnit->VAO);
+    Assert(RenderUnit->VBO);
+    Assert(RenderUnit->EBO);
+    Assert(AttribCount > 0);
+    Assert(AttribSpecs);
+    Assert(AttribData);
+    Assert(IndicesData);
+    Assert(VertexToSubCount > 0);
+    Assert(IndexToSubCount > 0);
+    Assert(RenderUnit->VertexCount + VertexToSubCount <= RenderUnit->MaxVertexCount);
+    Assert(RenderUnit->IndexCount + IndexToSubCount <= RenderUnit->MaxIndexCount);
+    
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, RenderUnit->VBO);
+
+    for (u32 AttribIndex = 0;
+         AttribIndex < AttribCount;
+         ++AttribIndex)
+    {
+        vertex_attrib_spec *Spec = AttribSpecs + AttribIndex;
+
+        if (AttribData[AttribIndex] && Spec->Stride > 0)
+        {
+            size_t BytesToCopy = VertexToSubCount * Spec->Stride;
+            size_t Offset = Spec->ByteOffset + (RenderUnit->VertexCount * Spec->Stride);
+            glBufferSubData(GL_ARRAY_BUFFER, Offset, BytesToCopy, AttribData[AttribIndex]);
+        }
+    }
+    RenderUnit->VertexCount += VertexToSubCount;
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, RenderUnit->EBO);
+
+    {
+        size_t BytesToCopy = sizeof(i32) * IndexToSubCount;
+        size_t Offset = sizeof(i32) * RenderUnit->IndexCount;
+        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, Offset, BytesToCopy, IndicesData);
+    }
+    RenderUnit->IndexCount += IndexToSubCount;
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+}
 
 u32
 OpenGL_LoadTexture(u8 *ImageData, u32 Width, u32 Height, u32 Pitch, u32 BytesPerPixel)
@@ -277,6 +352,24 @@ OpenGL_LoadTexture(u8 *ImageData, u32 Width, u32 Height, u32 Pitch, u32 BytesPer
     glBindTexture(GL_TEXTURE_2D, 0);
 
     return TextureID;
+}
+
+void
+OpenGL_BindTexturesForMaterial(render_data_material *Material)
+{
+    for (u32 TextureIndex = 0;
+         TextureIndex < TEXTURE_TYPE_COUNT;
+         ++TextureIndex)
+    {
+        // TODO: set sampler IDs for shader here?
+        // Not sure if it's still expensive to "unbind" texture, set to ID = 0
+        // Which this will keep doing for every new material, for unused textures.
+        // Maybe it's better to only bind texture if there's a new texture ID in the material
+        // But set uniform values for sampler IDs to not point them to any active texture?
+        glActiveTexture(GL_TEXTURE0 + TextureIndex);
+        glBindTexture(GL_TEXTURE_2D, Material->TextureIDs[TextureIndex]);
+    }
+
 }
 
 #endif

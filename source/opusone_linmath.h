@@ -320,6 +320,33 @@ union quat
     f32 E[4];
 };
 
+quat
+QuatGetNeutral()
+{
+    quat Result {};
+
+    Result.W = 1.0f;
+
+    return Result;
+}
+
+quat
+QuatGetRotationAroundAxis(vec3 Axis, f32 AngleRads)
+{
+    quat Result {};
+
+    f32 HalfAngle = AngleRads * 0.5f;
+
+    Axis = VecNormalize(Axis);
+    
+    Result.W = CosF(HalfAngle);
+    Result.X = Axis.X * SinF(HalfAngle);
+    Result.Y = Axis.Y * SinF(HalfAngle);
+    Result.Z = Axis.Z * SinF(HalfAngle);
+
+    return Result;
+}
+
 // -------------------------------------------------------------------------------
 // MATRIX 3 ----------------------------------------------------------------------
 // -------------------------------------------------------------------------------
@@ -537,13 +564,34 @@ operator*(mat4 M, vec4 V)
     return Result;
 }
 
+internal inline mat4
+Mat4GetFromMat3(mat3 M)
+{
+    mat4 Result {};
+
+    Result.E[0][0] = M.E[0][0];
+    Result.E[0][1] = M.E[0][1];
+    Result.E[0][2] = M.E[0][2];
+    
+    Result.E[1][0] = M.E[1][0];
+    Result.E[1][1] = M.E[1][1];
+    Result.E[1][2] = M.E[1][2];
+
+    Result.E[2][0] = M.E[2][0];
+    Result.E[2][1] = M.E[2][1];
+    Result.E[2][2] = M.E[2][2];
+
+    Result.E[3][3] = 1.0f; // TODO: Is this always the case when casting mat3 to mat4?
+
+    return Result;
+}
 
 // ---------------------------------------------------------------------------------
 // TRANSFORMS ----------------------------------------------------------------------
 // ---------------------------------------------------------------------------------
 
-mat4
-GetViewMat(vec3 EyePosition, vec3 TargetPoint, vec3 WorldUp)
+internal inline mat4
+Mat4GetView(vec3 EyePosition, vec3 TargetPoint, vec3 WorldUp)
 {
     // NOTE: General formula: https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluLookAt.xml
     // Translation optimization by dot product from GLM
@@ -569,8 +617,8 @@ GetViewMat(vec3 EyePosition, vec3 TargetPoint, vec3 WorldUp)
     return Result;
 }
 
-mat4
-GetPerspecitveProjectionMat(f32 FovY_Degrees, f32 AspectRatio, f32 Near, f32 Far)
+internal inline mat4
+Mat4GetPerspecitveProjection(f32 FovY_Degrees, f32 AspectRatio, f32 Near, f32 Far)
 {
     // NOTE: http://www.songho.ca/opengl/gl_projectionmatrix.html
     mat4 Result = {};
@@ -586,5 +634,67 @@ GetPerspecitveProjectionMat(f32 FovY_Degrees, f32 AspectRatio, f32 Near, f32 Far
 
     return Result;
 }
+
+internal inline mat4
+Mat4GetTranslation(vec3 Translation)
+{
+    mat4 Result = Mat4Identity();
+    
+    Result.E[3][0] = Translation.X;
+    Result.E[3][1] = Translation.Y;
+    Result.E[3][2] = Translation.Z;
+
+    return Result;
+}
+
+internal inline mat3
+Mat3GetRotationFromQuat(quat Q)
+{
+    mat3 Result = Mat3Identity();
+
+    f32 QXX = Q.X * Q.X;
+    f32 QYY = Q.Y * Q.Y;
+    f32 QZZ = Q.Z * Q.Z;
+    f32 QXZ = Q.X * Q.Z;
+    f32 QXY = Q.X * Q.Y;
+    f32 QYZ = Q.Y * Q.Z;
+    f32 QWX = Q.W * Q.X;
+    f32 QWY = Q.W * Q.Y;
+    f32 QWZ = Q.W * Q.Z;
+
+    Result.E[0][0] = 1.0f - 2.0f * (QYY + QZZ);
+    Result.E[0][1] = 2.0f * (QXY + QWZ);
+    Result.E[0][2] = 2.0f * (QXZ - QWY);
+
+    Result.E[1][0] = 2.0f * (QXY - QWZ);
+    Result.E[1][1] = 1.0f - 2.0f * (QXX + QZZ);
+    Result.E[1][2] = 2.0f * (QYZ + QWX);
+
+    Result.E[2][0] = 2.0f * (QXZ + QWY);
+    Result.E[2][1] = 2.0f * (QYZ - QWX);
+    Result.E[2][2] = 1.0f - 2.0f * (QXX + QYY);
+    
+    return Result;
+}
+
+internal inline mat4
+Mat4GetRotationFromQuat(quat Q)
+{
+    mat4 Result = Mat4GetFromMat3(Mat3GetRotationFromQuat(Q));
+    return Result;
+}
+
+internal inline mat4
+Mat4GetScale(vec3 Scale)
+{
+    mat4 Result = Mat4Identity();
+
+    Result.E[0][0] = Scale.X;
+    Result.E[1][1] = Scale.Y;
+    Result.E[2][2] = Scale.Z;
+
+    return Result;
+}
+
 
 #endif
