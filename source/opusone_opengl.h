@@ -5,40 +5,8 @@
 #include <glad/glad.h>
 
 #include "opusone_common.h"
-
-enum vertex_attrib_type
-{
-    VERTEX_ATTRIB_TYPE_FLOAT,
-    VERTEX_ATTRIB_TYPE_INT,
-    VERTEX_ATTRIB_TYPE_COUNT
-};
-
-struct vertex_attrib_spec
-{
-    u8 Stride;
-    u8 ComponentCount;
-    vertex_attrib_type Type;
-    size_t ByteOffset;
-};
-
-inline void
-CalculateVertexAttribOffsets(vertex_attrib_spec *AttribSpecs, u32 AttribCount, u32 VertexCount)
-{
-    Assert(AttribSpecs);
-    Assert(AttribCount > 0);
-    Assert(VertexCount > 0);
-    
-    size_t Offset = 0;
-    
-    for (u32 AttribIndex = 0;
-         AttribIndex < AttribCount;
-         ++AttribIndex)
-    {
-        vertex_attrib_spec *Spec = AttribSpecs + AttribIndex;
-        Spec->ByteOffset = Offset;
-        Offset += VertexCount * Spec->Stride;
-    }
-}
+#include "opusone_linmath.h"
+#include "opusone_vertspec.h"
 
 internal u32
 CompileShaderFromPath_(const char *Path, u32 ShaderType)
@@ -169,13 +137,13 @@ OpenGL_SetUniformMat4F(u32 ShaderID, const char *UniformName, f32 *Value, b32 Us
 }
 
 void
-OpenGL_PrepareVertexData(u32 VertexCount, vertex_attrib_spec *AttribSpecs, u32 AttribCount,
+OpenGL_PrepareVertexData(u32 VertexCount, vert_spec *VertSpec,
                          u32 IndexCount, size_t IndexSize, b32 IsDynamicDraw,
                          u32 *Out_VAO, u32 *Out_VBO, u32 *Out_EBO)
 {
     Assert(Out_VAO);
-    Assert(AttribSpecs);
-    Assert(AttribCount > 0);
+    Assert(VertSpec);
+    Assert(VertSpec->AttribCount > 0);
     Assert(VertexCount > 0);
 
     glGenVertexArrays(1, Out_VAO);
@@ -186,35 +154,31 @@ OpenGL_PrepareVertexData(u32 VertexCount, vertex_attrib_spec *AttribSpecs, u32 A
     glGenBuffers(1, &VBO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
 
-    size_t TotalVertexSize = 0;
-    for (u32 AttribIndex = 0;
-         AttribIndex < AttribCount;
-         ++AttribIndex)
-    {
-        TotalVertexSize += AttribSpecs[AttribIndex].Stride;
-    }
-    glBufferData(GL_ARRAY_BUFFER, TotalVertexSize * VertexCount, 0, (IsDynamicDraw ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW));
+    glBufferData(GL_ARRAY_BUFFER, VertSpec->VertexSize * VertexCount, 0, (IsDynamicDraw ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW));
+
+    size_t AttribOffset = 0;
     
     for (u32 AttribIndex = 0;
-         AttribIndex < AttribCount;
+         AttribIndex < VertSpec->AttribCount;
          ++AttribIndex)
     {
-        vertex_attrib_spec *Spec = AttribSpecs + AttribIndex;
-        
+        vert_attrib_spec *Spec = VertSpec->AttribSpecs + AttribIndex;
         switch (Spec->Type)
         {
-            case VERTEX_ATTRIB_TYPE_INT:
+            case VERT_ATTRIB_TYPE_INT:
             {
-                glVertexAttribIPointer(AttribIndex, Spec->ComponentCount, GL_INT, (GLsizei) Spec->Stride, (void *) Spec->ByteOffset);
+                glVertexAttribIPointer(AttribIndex, Spec->ComponentCount, GL_INT, (GLsizei) Spec->Stride, (void *) AttribOffset);
             } break;
 
             default:
             {
                 glVertexAttribPointer(AttribIndex, Spec->ComponentCount, GL_FLOAT, GL_FALSE,
-                                      (GLsizei) Spec->Stride, (void *) Spec->ByteOffset);
+                                      (GLsizei) Spec->Stride, (void *) AttribOffset);
             } break;
         }
         glEnableVertexAttribArray(AttribIndex);
+
+        AttribOffset += Spec->Stride * VertexCount;
     }
     
     Assert(VBO);
@@ -232,102 +196,63 @@ OpenGL_PrepareVertexData(u32 VertexCount, vertex_attrib_spec *AttribSpecs, u32 A
     }
 }
 
-#if 0
 void
-OpenGL_SubVertexData(u32 VBO, size_t *AttribMaxBytes, size_t *AttribUsedBytes, void **AttribData, u32 AttribCount,
-                     u32 EBO, size_t IndicesUsedBytes, void *IndicesData)
-{
-    Assert(VBO);
-    Assert(AttribMaxBytes);
-    Assert(AttribUsedBytes);
-    Assert(AttribData);
-    Assert(AttribCount > 0);
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-    size_t Offset = 0;
-    for (u32 AttribIndex = 0;
-         AttribIndex < AttribCount;
-         ++AttribIndex)
-    {
-        if (AttribData[AttribIndex])
-        {
-            glBufferSubData(GL_ARRAY_BUFFER, Offset, AttribUsedBytes[AttribIndex], AttribData[AttribIndex]);
-        }
-        Offset += AttribMaxBytes[AttribIndex];
-    }
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    if (EBO > 0 && IndicesUsedBytes > 0 && IndicesData)
-    {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, IndicesUsedBytes, IndicesData);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    }
-}
-#endif
-
-void
-OpenGL_PrepareVertexData(render_unit *RenderUnit,
-                         vertex_attrib_spec *AttribSpecs, u32 AttribCount, b32 IsDynamicDraw)
+OpenGL_PrepareVertexData(render_unit *RenderUnit, b32 IsDynamicDraw)
 {
     Assert(RenderUnit);
-    Assert(AttribSpecs);
-    Assert(AttribCount > 0);
 
-    OpenGL_PrepareVertexData(RenderUnit->MaxVertexCount, AttribSpecs, AttribCount,
+    OpenGL_PrepareVertexData(RenderUnit->MaxVertexCount, &RenderUnit->VertSpec,
                              RenderUnit->MaxIndexCount, sizeof(i32), IsDynamicDraw,
                              &RenderUnit->VAO, &RenderUnit->VBO, &RenderUnit->EBO);
 }
 
 void
-OpenGL_SubVertexData(render_unit *RenderUnit,
-                     void **AttribData, vertex_attrib_spec *AttribSpecs, u32 AttribCount, void *IndicesData,
-                     u32 VertexToSubCount, u32 IndexToSubCount)
+OpenGL_SubVertexData(render_unit *RenderUnit, void **AttribData, void *IndicesData, u32 VertexCount, u32 IndexCount)
 {
     Assert(RenderUnit);
     Assert(RenderUnit->VAO);
     Assert(RenderUnit->VBO);
     Assert(RenderUnit->EBO);
-    Assert(AttribCount > 0);
-    Assert(AttribSpecs);
+    Assert(RenderUnit->VertSpec.AttribCount > 0);
     Assert(AttribData);
     Assert(IndicesData);
-    Assert(VertexToSubCount > 0);
-    Assert(IndexToSubCount > 0);
-    Assert(RenderUnit->VertexCount + VertexToSubCount <= RenderUnit->MaxVertexCount);
-    Assert(RenderUnit->IndexCount + IndexToSubCount <= RenderUnit->MaxIndexCount);
+    Assert(VertexCount > 0);
+    Assert(IndexCount > 0);
+    Assert(RenderUnit->VertexCount + VertexCount <= RenderUnit->MaxVertexCount);
+    Assert(RenderUnit->IndexCount + IndexCount <= RenderUnit->MaxIndexCount);
     
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, RenderUnit->VBO);
 
+    size_t AttribOffset = 0;
+    
     for (u32 AttribIndex = 0;
-         AttribIndex < AttribCount;
+         AttribIndex < RenderUnit->VertSpec.AttribCount;
          ++AttribIndex)
     {
-        vertex_attrib_spec *Spec = AttribSpecs + AttribIndex;
+        vert_attrib_spec *Spec = RenderUnit->VertSpec.AttribSpecs + AttribIndex;
 
         if (AttribData[AttribIndex] && Spec->Stride > 0)
         {
-            size_t BytesToCopy = VertexToSubCount * Spec->Stride;
-            size_t Offset = Spec->ByteOffset + (RenderUnit->VertexCount * Spec->Stride);
-            glBufferSubData(GL_ARRAY_BUFFER, Offset, BytesToCopy, AttribData[AttribIndex]);
+            size_t BytesToCopy = VertexCount * Spec->Stride;
+            size_t BytesAlreadyUsed = RenderUnit->VertexCount * Spec->Stride;
+            glBufferSubData(GL_ARRAY_BUFFER, AttribOffset + BytesAlreadyUsed, BytesToCopy, AttribData[AttribIndex]);
         }
+
+        AttribOffset += RenderUnit->MaxVertexCount * Spec->Stride;
     }
-    RenderUnit->VertexCount += VertexToSubCount;
+    RenderUnit->VertexCount += VertexCount;
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, RenderUnit->EBO);
 
     {
-        size_t BytesToCopy = sizeof(i32) * IndexToSubCount;
-        size_t Offset = sizeof(i32) * RenderUnit->IndexCount;
-        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, Offset, BytesToCopy, IndicesData);
+        size_t BytesToCopy = sizeof(i32) * IndexCount;
+        size_t BytesAlreadyUsed = sizeof(i32) * RenderUnit->IndexCount;
+        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, BytesAlreadyUsed, BytesToCopy, IndicesData);
     }
-    RenderUnit->IndexCount += IndexToSubCount;
+    RenderUnit->IndexCount += IndexCount;
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }

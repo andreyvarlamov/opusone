@@ -27,6 +27,7 @@ typedef i32      b32;
 #define Noop { volatile int X = 0; }
 
 #define ArrayCount(Array) (sizeof((Array)) / (sizeof((Array)[0])))
+#define MemberSize(type, member) (sizeof(((type *) 0)->member))
 
 #define Kilobytes(Value) (         (Value) * 1024LL)
 #define Megabytes(Value) (Kilobytes(Value) * 1024LL)

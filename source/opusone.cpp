@@ -4,6 +4,7 @@
 #include "opusone_opengl.h"
 #include "opusone_math.h"
 #include "opusone_linmath.h"
+#include "opusone_vertspec.h"
 
 #include "opusone_camera.cpp"
 #include "opusone_assimp.cpp"
@@ -41,11 +42,19 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->RenderArena = MemoryArenaNested(&GameState->RootArena, Megabytes(4));
         GameState->AssetArena = MemoryArenaNested(&GameState->RootArena, Megabytes(16));
 
-        GameState->ShaderID = OpenGL_BuildShaderProgram("resources/shaders/Basic.vs", "resources/shaders/Basic.fs");
-        OpenGL_SetUniformInt(GameState->ShaderID, "DiffuseMap", 0, true);
-        OpenGL_SetUniformInt(GameState->ShaderID, "SpecularMap", 1, false);
-        OpenGL_SetUniformInt(GameState->ShaderID, "EmissionMap", 2, false);
-        OpenGL_SetUniformInt(GameState->ShaderID, "NormalMap", 3, false);
+        GameState->StaticRenderUnit.ShaderID = 0;
+            // OpenGL_BuildShaderProgram("resources/shaders/StaticMesh.vs", "resources/shaders/Basic.fs");
+        OpenGL_SetUniformInt(GameState->StaticRenderUnit.ShaderID, "DiffuseMap", 0, true);
+        OpenGL_SetUniformInt(GameState->StaticRenderUnit.ShaderID, "SpecularMap", 1, false);
+        OpenGL_SetUniformInt(GameState->StaticRenderUnit.ShaderID, "EmissionMap", 2, false);
+        OpenGL_SetUniformInt(GameState->StaticRenderUnit.ShaderID, "NormalMap", 3, false);
+
+        GameState->SkinnedRenderUnit.ShaderID = 0;
+            // OpenGL_BuildShaderProgram("resources/shaders/SkinnedMesh.vs", "resources/shaders/Basic.fs");
+        OpenGL_SetUniformInt(GameState->SkinnedRenderUnit.ShaderID, "DiffuseMap", 0, true);
+        OpenGL_SetUniformInt(GameState->SkinnedRenderUnit.ShaderID, "SpecularMap", 1, false);
+        OpenGL_SetUniformInt(GameState->SkinnedRenderUnit.ShaderID, "EmissionMap", 2, false);
+        OpenGL_SetUniformInt(GameState->SkinnedRenderUnit.ShaderID, "NormalMap", 3, false);
 
         InitializeCamera(GameState, vec3 { 0.0f, 1.7f, 5.0f }, 0.0f, 90.0f, 5.0f, CAMERA_CONTROL_MOUSE);
 
@@ -73,12 +82,23 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         //
         // NOTE: Calculate how much space to allocate for render data
         //
-        GameState->RenderUnit.VertexCount = 0;
-        GameState->RenderUnit.MaxVertexCount = 0;
-        GameState->RenderUnit.IndexCount = 0;
-        GameState->RenderUnit.MaxIndexCount = 0;
-        GameState->RenderUnit.MaterialCount = 1; // Material0 is no material
-        GameState->RenderUnit.MeshCount = 0;
+        GameState->StaticRenderUnit.VertexCount = 0;
+        GameState->StaticRenderUnit.MaxVertexCount = 0;
+        GameState->StaticRenderUnit.IndexCount = 0;
+        GameState->StaticRenderUnit.MaxIndexCount = 0;
+        GameState->StaticRenderUnit.MaterialCount = 1; // Material0 is no material
+        GameState->StaticRenderUnit.MaxMaterialCount = 1; // Material0 is no material
+        GameState->StaticRenderUnit.MeshCount = 0;
+        GameState->StaticRenderUnit.MaxMeshCount = 0;
+
+        GameState->SkinnedRenderUnit.VertexCount = 0;
+        GameState->SkinnedRenderUnit.MaxVertexCount = 0;
+        GameState->SkinnedRenderUnit.IndexCount = 0;
+        GameState->SkinnedRenderUnit.MaxIndexCount = 0;
+        GameState->SkinnedRenderUnit.MaterialCount = 1; // Material0 is no material
+        GameState->SkinnedRenderUnit.MaxMaterialCount = 1; // Material0 is no material
+        GameState->SkinnedRenderUnit.MeshCount = 0;
+        GameState->SkinnedRenderUnit.MaxMeshCount = 0;
         
         for (u32 BlueprintIndex = 1;
              BlueprintIndex < GameState->WorldObjectBlueprintCount;
@@ -86,46 +106,64 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         {
             world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + BlueprintIndex;
             imported_model *ImportedModel = Blueprint->ImportedModel;
-            
-            GameState->RenderUnit.MaterialCount += ImportedModel->MaterialCount;
-            GameState->RenderUnit.MeshCount += ImportedModel->MeshCount;
 
+            render_unit *RenderUnit;
+            if (ImportedModel->Armature)
+            {
+                RenderUnit = &GameState->SkinnedRenderUnit;
+            }
+            else
+            {
+                RenderUnit = &GameState->StaticRenderUnit;
+            }
+
+            RenderUnit->MaxMaterialCount += ImportedModel->MaterialCount;
+            RenderUnit->MaxMeshCount += ImportedModel->MeshCount;
             for (u32 MeshIndex = 0;
                  MeshIndex < ImportedModel->MeshCount;
                  ++MeshIndex)
             {
                 imported_mesh *ImportedMesh = ImportedModel->Meshes + MeshIndex;
 
-                GameState->RenderUnit.MaxVertexCount += ImportedMesh->VertexCount;
-                GameState->RenderUnit.MaxIndexCount += ImportedMesh->IndexCount;
+                RenderUnit->MaxVertexCount += ImportedMesh->VertexCount;
+                RenderUnit->MaxIndexCount += ImportedMesh->IndexCount;
             }
         }
 
         //
-        // NOTE: Initialize render unit
+        // NOTE: Allocate memory for render units
         //
-        vertex_attrib_spec AttribSpecs[] = {
-            vertex_attrib_spec { sizeof(vec3), 3, VERTEX_ATTRIB_TYPE_FLOAT, 0 }, // Position
-            vertex_attrib_spec { sizeof(vec3), 3, VERTEX_ATTRIB_TYPE_FLOAT, 0 }, // Tangent
-            vertex_attrib_spec { sizeof(vec3), 3, VERTEX_ATTRIB_TYPE_FLOAT, 0 }, // Bitangent
-            vertex_attrib_spec { sizeof(vec3), 3, VERTEX_ATTRIB_TYPE_FLOAT, 0 }, // Normal
-            vertex_attrib_spec { sizeof(vec4), 4, VERTEX_ATTRIB_TYPE_FLOAT, 0 }, // Color
-            vertex_attrib_spec { sizeof(vec2), 2, VERTEX_ATTRIB_TYPE_FLOAT, 0 }  // UV
-        };
-        CalculateVertexAttribOffsets(AttribSpecs, ArrayCount(AttribSpecs), GameState->RenderUnit.MaxVertexCount);
+        {
+            render_unit *RenderUnit = &GameState->StaticRenderUnit;
 
-        OpenGL_PrepareVertexData(&GameState->RenderUnit, AttribSpecs, ArrayCount(AttribSpecs), false);
+            SetVertSpec(&RenderUnit->VertSpec, VERTS_STATIC_MESH);
 
-        GameState->RenderUnit.Materials = MemoryArena_PushArray(&GameState->RenderArena,
-                                                                GameState->RenderUnit.MaterialCount,
-                                                                render_data_material);
+            OpenGL_PrepareVertexData(RenderUnit, true);
 
-        GameState->RenderUnit.Meshes = MemoryArena_PushArray(&GameState->RenderArena,
-                                                             GameState->RenderUnit.MeshCount,
-                                                             render_data_mesh);
+            RenderUnit->Materials = MemoryArena_PushArray(&GameState->RenderArena,
+                                                          RenderUnit->MaxMaterialCount,
+                                                          render_data_material);
+            RenderUnit->Meshes = MemoryArena_PushArray(&GameState->RenderArena,
+                                                       RenderUnit->MaxMeshCount,
+                                                       render_data_mesh);
+        }
+        {
+            render_unit *RenderUnit = &GameState->SkinnedRenderUnit;
 
-        u32 BaseRenderMaterialForBlueprint = 1;
-        u32 BaseRenderMeshForBlueprint = 0;
+            SetVertSpec(&RenderUnit->VertSpec, VERTS_SKINNED_MESH);
+
+            OpenGL_PrepareVertexData(RenderUnit, false);
+
+            RenderUnit->Materials = MemoryArena_PushArray(&GameState->RenderArena,
+                                                          RenderUnit->MaxMaterialCount,
+                                                          render_data_material);
+            RenderUnit->Meshes = MemoryArena_PushArray(&GameState->RenderArena,
+                                                       RenderUnit->MaxMeshCount,
+                                                       render_data_mesh);
+        }
+        //
+        // NOTE: Process import data into the render units
+        //
         for (u32 BlueprintIndex = 1;
              BlueprintIndex < GameState->WorldObjectBlueprintCount;
              ++BlueprintIndex)
@@ -133,12 +171,24 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + BlueprintIndex;
             imported_model *ImportedModel = Blueprint->ImportedModel;
 
+            render_unit *RenderUnit;
+            
+            if (ImportedModel->Armature)
+            {
+                RenderUnit = &GameState->SkinnedRenderUnit;
+            }
+            else
+            {
+                RenderUnit = &GameState->StaticRenderUnit;
+            }
+
+            Assert(RenderUnit->MaterialCount + ImportedModel->MaterialCount <= RenderUnit->MaxMaterialCount);
             for (u32 MaterialIndex = 0;
                  MaterialIndex < ImportedModel->MaterialCount;
                  ++MaterialIndex)
             {
                 imported_material *ImportedMaterial = ImportedModel->Materials + MaterialIndex;
-                render_data_material *Material = GameState->RenderUnit.Materials + BaseRenderMaterialForBlueprint + MaterialIndex;
+                render_data_material *Material = RenderUnit->Materials + RenderUnit->MaterialCount + MaterialIndex;
                 
                 for (u32 TexturePathIndex = 0;
                      TexturePathIndex < TEXTURE_TYPE_COUNT;
@@ -159,34 +209,42 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 }
             }
 
+            Assert(RenderUnit->MeshCount + ImportedModel->MeshCount <= RenderUnit->MaxMeshCount);
             for (u32 MeshIndex = 0;
                  MeshIndex < ImportedModel->MeshCount;
                  ++MeshIndex)
             {
                 imported_mesh *ImportedMesh = ImportedModel->Meshes + MeshIndex;
-                render_data_mesh *Mesh = GameState->RenderUnit.Meshes + BaseRenderMeshForBlueprint + MeshIndex;
+                render_data_mesh *Mesh = RenderUnit->Meshes + RenderUnit->MeshCount + MeshIndex;
 
-                Mesh->BaseVertexIndex = GameState->RenderUnit.VertexCount;
-                Mesh->StartingIndex = GameState->RenderUnit.IndexCount;
+                Mesh->BaseVertexIndex = RenderUnit->VertexCount;
+                Mesh->StartingIndex = RenderUnit->IndexCount;
                 Mesh->IndexCount = ImportedMesh->IndexCount;
-                Mesh->MaterialID = BaseRenderMaterialForBlueprint + ImportedMesh->MaterialID;
-                
-                void *AttribData[] = {
-                    ImportedMesh->VertexPositions, ImportedMesh->VertexTangents, ImportedMesh->VertexBitangents,
-                    ImportedMesh->VertexNormals, ImportedMesh->VertexColors, ImportedMesh->VertexUVs
-                };
-                Assert(ArrayCount(AttribSpecs) == ArrayCount(AttribData));
-                OpenGL_SubVertexData(&GameState->RenderUnit,
-                                     AttribData, AttribSpecs, ArrayCount(AttribSpecs), ImportedMesh->Indices,
-                                     ImportedMesh->VertexCount, ImportedMesh->IndexCount);
+                Mesh->MaterialID = RenderUnit->MaterialCount + ImportedMesh->MaterialID;
+
+                if (ImportedModel->Armature)
+                {
+                    void *AttribData[] = {
+                        ImportedMesh->VertexPositions, ImportedMesh->VertexTangents, ImportedMesh->VertexBitangents,
+                        ImportedMesh->VertexNormals, ImportedMesh->VertexColors, ImportedMesh->VertexUVs, 0, 0
+                    };
+                    OpenGL_SubVertexData(RenderUnit, AttribData, ImportedMesh->Indices, ImportedMesh->VertexCount, ImportedMesh->IndexCount);               }
+                else
+                {
+                    void *AttribData[] = {
+                        ImportedMesh->VertexPositions, ImportedMesh->VertexTangents, ImportedMesh->VertexBitangents,
+                        ImportedMesh->VertexNormals, ImportedMesh->VertexColors, ImportedMesh->VertexUVs
+                    };
+                    OpenGL_SubVertexData(RenderUnit, AttribData, ImportedMesh->Indices, ImportedMesh->VertexCount, ImportedMesh->IndexCount);
+                }
             }
 
-            Blueprint->RenderUnit = &GameState->RenderUnit;
-            Blueprint->BaseMeshID = BaseRenderMeshForBlueprint;
+            Blueprint->RenderUnit = &GameState->StaticRenderUnit;
+            Blueprint->BaseMeshID = RenderUnit->MeshCount;
             Blueprint->MeshCount = ImportedModel->MeshCount;
 
-            BaseRenderMaterialForBlueprint += ImportedModel->MaterialCount;
-            BaseRenderMeshForBlueprint += ImportedModel->MeshCount;
+            RenderUnit->MaterialCount += ImportedModel->MaterialCount;
+            RenderUnit->MeshCount += ImportedModel->MeshCount;
         }
 
         //
@@ -202,9 +260,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         //
         world_object_instance Instances[] = {
             world_object_instance { 1, vec3 { 0.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
+            world_object_instance { 2, vec3 { 0.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
+#if 0
             world_object_instance { 1, vec3 { 20.0f, 0.0f, 0.0f }, QuatGetRotationAroundAxis(vec3 { 0.0f, 1.0f, 1.0f }, ToRadiansF(45.0f)), vec3 { 0.5f, 1.0f, 2.0f } },
             world_object_instance { 1, vec3 { 0.0f, 0.0f, -30.0f }, QuatGetRotationAroundAxis(vec3 { 1.0f, 1.0f, 1.0f }, ToRadiansF(160.0f)), vec3 { 1.0f, 1.0f, 5.0f } },
-            world_object_instance { 2, vec3 { 0.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
             world_object_instance { 2, vec3 { 0.0f, 0.0f, 1.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
             world_object_instance { 2, vec3 { 0.0f, 0.0f, 2.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
             world_object_instance { 2, vec3 { 0.0f, 0.0f, 3.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
@@ -223,6 +282,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_instance { 2, vec3 { 3.0f, 0.0f, 1.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
             world_object_instance { 2, vec3 { 3.0f, 0.0f, 2.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
             world_object_instance { 2, vec3 { 3.0f, 0.0f, 3.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } }
+#endif
         };
 
         GameState->WorldObjectInstanceCount = ArrayCount(Instances) + 1;
@@ -276,16 +336,16 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    OpenGL_UseShader(GameState->ShaderID);
+    OpenGL_UseShader(GameState->StaticRenderUnit.ShaderID);
 
     mat4 ProjectionMat = Mat4GetPerspecitveProjection(70.0f, (f32) GameInput->ScreenWidth / (f32) GameInput->ScreenHeight, 0.1f, 1000.0f);
-    OpenGL_SetUniformMat4F(GameState->ShaderID, "Projection", (f32 *) &ProjectionMat, false);
+    OpenGL_SetUniformMat4F(GameState->StaticRenderUnit.ShaderID, "Projection", (f32 *) &ProjectionMat, false);
     mat4 ViewMat = GetCameraViewMat(&GameState->Camera);
-    OpenGL_SetUniformMat4F(GameState->ShaderID, "View", (f32 *) &ViewMat, false);
+    OpenGL_SetUniformMat4F(GameState->StaticRenderUnit.ShaderID, "View", (f32 *) &ViewMat, false);
 
     // Render each render unit
     {
-        render_unit *RenderUnit = &GameState->RenderUnit;
+        render_unit *RenderUnit = &GameState->StaticRenderUnit;
 
         glBindVertexArray(RenderUnit->VAO);
 
@@ -315,7 +375,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 {
                     world_object_instance *Instance = GameState->WorldObjectInstances + InstanceID;
                     mat4 ModelTransform = GetTransformForWorldObjectInstance(Instance);
-                    OpenGL_SetUniformMat4F(GameState->ShaderID, "Model", (f32 *) &ModelTransform, false);
+                    OpenGL_SetUniformMat4F(RenderUnit->ShaderID, "Model", (f32 *) &ModelTransform, false);
                     // TODO: Should I treat indices as unsigned everywhere?
                     // TODO: Instanced draw?
                     glDrawElementsBaseVertex(GL_TRIANGLES,
