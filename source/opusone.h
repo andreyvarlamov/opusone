@@ -6,7 +6,6 @@
 #include "opusone_linmath.h"
 #include "opusone_camera.h"
 #include "opusone_assimp.h"
-#include "opusone_vertspec.h"
 
 struct render_data_material
 {
@@ -37,8 +36,6 @@ struct render_data_mesh
 
 struct render_unit
 {
-    u32 ShaderID;
-
     u32 VAO;
     u32 VBO;
     u32 EBO;
@@ -50,15 +47,11 @@ struct render_unit
     u32 MaxIndexCount;
 
     u32 MaterialCount;
-    u32 MaxMaterialCount;
     render_data_material *Materials;
 
     u32 MeshCount;
-    u32 MaxMeshCount;
     render_data_mesh *Meshes;
 
-    vert_spec VertSpec;
-    
     render_unit *Next;
 };
 
@@ -91,14 +84,15 @@ struct game_state
     camera Camera;
     camera_control_scheme CameraControlScheme;
 
-    render_unit StaticRenderUnit;
-    render_unit SkinnedRenderUnit;
+    render_unit RenderUnit;
     
     u32 WorldObjectBlueprintCount;
     world_object_blueprint *WorldObjectBlueprints;
     
     u32 WorldObjectInstanceCount;
     world_object_instance *WorldObjectInstances;
+
+    u32 ShaderID;
 };
 
 #endif
