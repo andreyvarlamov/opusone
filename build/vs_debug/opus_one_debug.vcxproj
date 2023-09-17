@@ -18,6 +18,23 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\source\opusone.cpp" />
+    <ClCompile Include="..\..\source\opusone_assimp.cpp" />
+    <ClCompile Include="..\..\source\opusone_camera.cpp" />
+    <ClCompile Include="..\..\source\opusone_render.cpp" />
+    <ClCompile Include="..\..\source\sdl_opusone.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\source\opusone.h" />
+    <ClInclude Include="..\..\source\opusone_assimp.h" />
+    <ClInclude Include="..\..\source\opusone_camera.h" />
+    <ClInclude Include="..\..\source\opusone_common.h" />
+    <ClInclude Include="..\..\source\opusone_linmath.h" />
+    <ClInclude Include="..\..\source\opusone_math.h" />
+    <ClInclude Include="..\..\source\opusone_platform.h" />
+    <ClInclude Include="..\..\source\opusone_render.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -133,22 +150,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\source\opusone.cpp" />
-    <ClCompile Include="..\..\source\opusone_assimp.cpp" />
-    <ClCompile Include="..\..\source\opusone_camera.cpp" />
-    <ClCompile Include="..\..\source\sdl_opusone.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\source\opusone.h" />
-    <ClInclude Include="..\..\source\opusone_assimp.h" />
-    <ClInclude Include="..\..\source\opusone_camera.h" />
-    <ClInclude Include="..\..\source\opusone_common.h" />
-    <ClInclude Include="..\..\source\opusone_linmath.h" />
-    <ClInclude Include="..\..\source\opusone_math.h" />
-    <ClInclude Include="..\..\source\opusone_opengl.h" />
-    <ClInclude Include="..\..\source\opusone_platform.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

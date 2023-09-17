@@ -113,4 +113,7 @@ struct imported_model
     imported_animation *Animations;
 };
 
+imported_model *
+Assimp_LoadModel(memory_arena *AssetArena, const char *Path);
+
 #endif

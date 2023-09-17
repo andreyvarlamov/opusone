@@ -1,12 +1,11 @@
 #include "opusone_common.h"
 #include "opusone_platform.h"
 #include "opusone.h"
-#include "opusone_opengl.h"
 #include "opusone_math.h"
 #include "opusone_linmath.h"
-
-#include "opusone_camera.cpp"
-#include "opusone_assimp.cpp"
+#include "opusone_camera.h"
+#include "opusone_assimp.h"
+#include "opusone_render.h"
 
 #include <cstdio>
 #include <glad/glad.h>
@@ -47,7 +46,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         OpenGL_SetUniformInt(GameState->ShaderID, "EmissionMap", 2, false);
         OpenGL_SetUniformInt(GameState->ShaderID, "NormalMap", 3, false);
 
-        InitializeCamera(GameState, vec3 { 0.0f, 1.7f, 5.0f }, 0.0f, 90.0f, 5.0f, CAMERA_CONTROL_MOUSE);
+        InitializeCamera(&GameState->Camera, vec3 { 0.0f, 1.7f, 5.0f }, 0.0f, 90.0f, 5.0f, CAMERA_CONTROL_MOUSE);
 
         //
         // NOTE: Load models using assimp
@@ -104,6 +103,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         //
         // NOTE: Initialize render unit
         //
+        #if 0
         vertex_attrib_spec AttribSpecs[] = {
             vertex_attrib_spec { sizeof(vec3), 3, VERTEX_ATTRIB_TYPE_FLOAT, 0 }, // Position
             vertex_attrib_spec { sizeof(vec3), 3, VERTEX_ATTRIB_TYPE_FLOAT, 0 }, // Tangent
@@ -115,7 +115,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         CalculateVertexAttribOffsets(AttribSpecs, ArrayCount(AttribSpecs), GameState->RenderUnit.MaxVertexCount);
 
         OpenGL_PrepareVertexData(&GameState->RenderUnit, AttribSpecs, ArrayCount(AttribSpecs), false);
-
+        #endif
+        
+        GameState->RenderUnit.VertSpecType = VERT_SPEC_STATIC_MESH;
+        PrepareVertexDataForRenderUnit(&GameState->RenderUnit);
+        
         GameState->RenderUnit.Materials = MemoryArena_PushArray(&GameState->RenderArena,
                                                                 GameState->RenderUnit.MaterialCount,
                                                                 render_data_material);
@@ -170,15 +174,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 Mesh->StartingIndex = GameState->RenderUnit.IndexCount;
                 Mesh->IndexCount = ImportedMesh->IndexCount;
                 Mesh->MaterialID = BaseRenderMaterialForBlueprint + ImportedMesh->MaterialID;
-                
+
                 void *AttribData[] = {
                     ImportedMesh->VertexPositions, ImportedMesh->VertexTangents, ImportedMesh->VertexBitangents,
                     ImportedMesh->VertexNormals, ImportedMesh->VertexColors, ImportedMesh->VertexUVs
                 };
-                Assert(ArrayCount(AttribSpecs) == ArrayCount(AttribData));
-                OpenGL_SubVertexData(&GameState->RenderUnit,
-                                     AttribData, AttribSpecs, ArrayCount(AttribSpecs), ImportedMesh->Indices,
-                                     ImportedMesh->VertexCount, ImportedMesh->IndexCount);
+                
+                SubVertexDataForRenderUnit(&GameState->RenderUnit, AttribData, ArrayCount(AttribData), ImportedMesh->Indices,
+                                           ImportedMesh->VertexCount, ImportedMesh->IndexCount);
             }
 
             Blueprint->RenderUnit = &GameState->RenderUnit;
@@ -229,7 +232,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->WorldObjectInstances = MemoryArena_PushArray(&GameState->WorldArena,
                                                                 GameState->WorldObjectInstanceCount,
                                                                 world_object_instance);
-
+        
         for (u32 InstanceIndex = 1;
              InstanceIndex < GameState->WorldObjectInstanceCount;
              ++InstanceIndex)
@@ -302,7 +305,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 if (Mesh->MaterialID > 0)
                 {
                     render_data_material *Material = RenderUnit->Materials + Mesh->MaterialID;
-                    OpenGL_BindTexturesForMaterial(Material);
+                    BindTexturesForMaterial(Material);
                 }
             }
 
@@ -328,3 +331,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 }
+
+#include "opusone_camera.cpp"
+#include "opusone_assimp.cpp"
+#include "opusone_render.cpp"

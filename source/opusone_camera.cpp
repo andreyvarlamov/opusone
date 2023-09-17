@@ -1,9 +1,11 @@
 #include "opusone_camera.h"
 
-#include "opusone.h"
+#include "opusone_platform.h"
 #include "opusone_common.h"
 #include "opusone_math.h"
 #include "opusone_linmath.h"
+
+#include <cstdio>
 
 internal inline void
 UpdateCameraOrientation(camera *Camera, f32 DeltaTheta, f32 DeltaPhi)
@@ -73,33 +75,42 @@ UpdateCameraHorizontalPosition(camera *Camera, f32 MoveSpeedWorld, vec3 MoveDirL
 }
 
 void
-SetCameraControlScheme(game_state *GameState, camera_control_scheme NewControlScheme)
+SetCameraControlScheme(camera *Camera, camera_control_scheme NewControlScheme)
 {
     NewControlScheme = (camera_control_scheme) (((i32) NewControlScheme % (i32) CAMERA_CONTROL_COUNT));
-    if (GameState->CameraControlScheme != CAMERA_CONTROL_MOUSE && NewControlScheme == CAMERA_CONTROL_MOUSE)
+    if (Camera->ControlScheme != CAMERA_CONTROL_MOUSE && NewControlScheme == CAMERA_CONTROL_MOUSE)
     {
         PlatformSetRelativeMouse(false);
     }
-    else if (GameState->CameraControlScheme == CAMERA_CONTROL_MOUSE && NewControlScheme != CAMERA_CONTROL_MOUSE)
+    else if (Camera->ControlScheme == CAMERA_CONTROL_MOUSE && NewControlScheme != CAMERA_CONTROL_MOUSE)
     {
         PlatformSetRelativeMouse(true);
     }
 
-    printf("Camera control scheme: %d -> %d\n", GameState->CameraControlScheme, NewControlScheme);
+    printf("Camera control scheme: %d -> %d\n", Camera->ControlScheme, NewControlScheme);
 
-    GameState->CameraControlScheme = NewControlScheme;
+    Camera->ControlScheme = NewControlScheme;
 }
 
 void
-InitializeCamera(game_state *GameState, vec3 Position, f32 Theta, f32 Phi, f32 Radius, camera_control_scheme ControlScheme)
+InitializeCamera(camera *Camera, vec3 Position, f32 Theta, f32 Phi, f32 Radius, camera_control_scheme ControlScheme)
 {
-    GameState->Camera.Position = Position;
-    GameState->Camera.Theta = Theta;
-    GameState->Camera.Phi = Phi;
-    GameState->Camera.Radius = Radius;
+    Camera->Position = Position;
+    Camera->Theta = Theta;
+    Camera->Phi = Phi;
+    Camera->Radius = Radius;
 
-    GameState->CameraControlScheme = (camera_control_scheme) 0;
-    SetCameraControlScheme(GameState, ControlScheme);
+    Camera->ControlScheme = (camera_control_scheme) 0;
+    SetCameraControlScheme(Camera, ControlScheme);
+}
+
+mat4
+GetCameraViewMat(camera *Camera)
+{
+    vec3 Front = -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
+    vec3 CameraTarget = Camera->Position + Front;
+    mat4 Result = Mat4GetView(Camera->Position, CameraTarget, vec3 { 0.0f, 1.0f, 0.0f });
+    return Result;
 }
 
 void
@@ -114,7 +125,7 @@ UpdateCameraForFrame(game_state *GameState, game_input *GameInput)
     f32 CameraDeltaTheta = 0.0f;
     f32 CameraDeltaPhi = 0.0f;
 
-    switch (GameState->CameraControlScheme)
+    switch (GameState->Camera.ControlScheme)
     {
         case CAMERA_CONTROL_MOUSE:
         {
@@ -167,7 +178,7 @@ UpdateCameraForFrame(game_state *GameState, game_input *GameInput)
             {
                 CameraTranslation.X = 1.0f;
             }
-            if (GameState->CameraControlScheme == CAMERA_CONTROL_FLY_AROUND)
+            if (GameState->Camera.ControlScheme == CAMERA_CONTROL_FLY_AROUND)
             {
                 if (GameInput->CurrentKeyStates[SDL_SCANCODE_LSHIFT])
                 {
@@ -193,20 +204,11 @@ UpdateCameraForFrame(game_state *GameState, game_input *GameInput)
 
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_F1] && !GameInput->KeyWasDown[SDL_SCANCODE_F1])
     {
-        SetCameraControlScheme(GameState, (camera_control_scheme) ((i32) GameState->CameraControlScheme + 1));
+        SetCameraControlScheme(&GameState->Camera, (camera_control_scheme) ((i32) GameState->Camera.ControlScheme + 1));
         GameInput->KeyWasDown[SDL_SCANCODE_F1] = true;
     }
     else if (!GameInput->CurrentKeyStates[SDL_SCANCODE_F1])
     {
         GameInput->KeyWasDown[SDL_SCANCODE_F1] = false;
     }
-}
-
-mat4
-GetCameraViewMat(camera *Camera)
-{
-    vec3 Front = -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
-    vec3 CameraTarget = Camera->Position + Front;
-    mat4 Result = Mat4GetView(Camera->Position, CameraTarget, vec3 { 0.0f, 1.0f, 0.0f });
-    return Result;
 }
