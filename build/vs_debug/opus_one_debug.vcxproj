@@ -35,6 +35,11 @@
     <ClInclude Include="..\..\source\opusone_platform.h" />
     <ClInclude Include="..\..\source\opusone_render.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\resources\shaders\Basic.fs" />
+    <None Include="..\..\resources\shaders\SkinnedMesh.vs" />
+    <None Include="..\..\resources\shaders\StaticMesh.vs" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>

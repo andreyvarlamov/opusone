@@ -48,6 +48,8 @@ struct render_data_mesh
 
 struct render_unit
 {
+    u32 ShaderID;
+
     u32 VAO;
     u32 VBO;
     u32 EBO;
@@ -121,7 +123,7 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
 void
 InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
                      u32 MaterialCount, u32 MeshCount, u32 VertexCount, u32 IndexCount,
-                     memory_arena *Arena);
+                     u32 ShaderID, memory_arena *Arena);
 
 void
 BindTexturesForMaterial(render_data_material *Material);

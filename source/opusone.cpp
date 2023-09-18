@@ -30,6 +30,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     {
         GameMemory->IsInitialized = true;
 
+        GameState->TestAngle = 0.0f;
+
         // TODO: Allocate more than game_state size? Better if I do hot-reloading in the future
         // NOTE: Not sure if nested arenas are a good idea, but I will go with it for now
         u8 *RootArenaBase = (u8 *) GameMemory->Storage + sizeof(game_state);
@@ -40,11 +42,16 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->RenderArena = MemoryArenaNested(&GameState->RootArena, Megabytes(4));
         GameState->AssetArena = MemoryArenaNested(&GameState->RootArena, Megabytes(16));
 
-        GameState->ShaderID = OpenGL_BuildShaderProgram("resources/shaders/Basic.vs", "resources/shaders/Basic.fs");
-        OpenGL_SetUniformInt(GameState->ShaderID, "DiffuseMap", 0, true);
-        OpenGL_SetUniformInt(GameState->ShaderID, "SpecularMap", 1, false);
-        OpenGL_SetUniformInt(GameState->ShaderID, "EmissionMap", 2, false);
-        OpenGL_SetUniformInt(GameState->ShaderID, "NormalMap", 3, false);
+        u32 StaticShader = OpenGL_BuildShaderProgram("resources/shaders/StaticMesh.vs", "resources/shaders/Basic.fs");
+        OpenGL_SetUniformInt(StaticShader, "DiffuseMap", 0, true);
+        OpenGL_SetUniformInt(StaticShader, "SpecularMap", 1, false);
+        OpenGL_SetUniformInt(StaticShader, "EmissionMap", 2, false);
+        OpenGL_SetUniformInt(StaticShader, "NormalMap", 3, false);
+        u32 SkinnedShader = OpenGL_BuildShaderProgram("resources/shaders/SkinnedMesh.vs", "resources/shaders/Basic.fs");
+        OpenGL_SetUniformInt(SkinnedShader, "DiffuseMap", 0, true);
+        OpenGL_SetUniformInt(SkinnedShader, "SpecularMap", 1, false);
+        OpenGL_SetUniformInt(SkinnedShader, "EmissionMap", 2, false);
+        OpenGL_SetUniformInt(SkinnedShader, "NormalMap", 3, false);
 
         InitializeCamera(&GameState->Camera, vec3 { 0.0f, 1.7f, 5.0f }, 0.0f, 90.0f, 5.0f, CAMERA_CONTROL_MOUSE);
 
@@ -131,7 +138,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             InitializeRenderUnit(&GameState->StaticRenderUnit, VERT_SPEC_STATIC_MESH,
                                  MaterialsForStaticCount, MeshesForStaticCount,
                                  VerticesForStaticCount, IndicesForStaticCount,
-                                 &GameState->RenderArena);
+                                 StaticShader, &GameState->RenderArena);
         }
 
         if (VerticesForSkinnedCount > 0)
@@ -139,7 +146,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             InitializeRenderUnit(&GameState->SkinnedRenderUnit, VERT_SPEC_SKINNED_MESH,
                                  MaterialsForSkinnedCount, MeshesForSkinnedCount,
                                  VerticesForSkinnedCount, IndicesForSkinnedCount,
-                                 &GameState->RenderArena);
+                                 SkinnedShader, &GameState->RenderArena);
         }
 
         //
@@ -338,28 +345,49 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
 
     UpdateCameraForFrame(GameState, GameInput);
+
+    GameState->TestAngle += GameInput->DeltaTime * 90.0f;
+    if (GameState->TestAngle > 360.0f)
+    {
+        GameState->TestAngle -= 360.0f;
+    }
     
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    OpenGL_UseShader(GameState->ShaderID);
-
-    mat4 ProjectionMat = Mat4GetPerspecitveProjection(70.0f, (f32) GameInput->ScreenWidth / (f32) GameInput->ScreenHeight, 0.1f, 1000.0f);
-    OpenGL_SetUniformMat4F(GameState->ShaderID, "Projection", (f32 *) &ProjectionMat, false);
-    mat4 ViewMat = GetCameraViewMat(&GameState->Camera);
-    OpenGL_SetUniformMat4F(GameState->ShaderID, "View", (f32 *) &ViewMat, false);
 
     //
     // NOTE: Render each render unit
     //
     render_unit *RenderUnits[] = { &GameState->StaticRenderUnit, &GameState->SkinnedRenderUnit };
+    
+    u32 PreviousShaderID = 0;
+    
     for (u32 RenderUnitIndex = 0;
          RenderUnitIndex < ArrayCount(RenderUnits);
          ++RenderUnitIndex)
     {
         render_unit *RenderUnit = RenderUnits[RenderUnitIndex];
 
+        if (PreviousShaderID == 0 || RenderUnit->ShaderID != PreviousShaderID)
+        {
+            Assert(RenderUnit->ShaderID > 0);
+            
+            OpenGL_UseShader(RenderUnit->ShaderID);
+
+            mat4 ProjectionMat = Mat4GetPerspecitveProjection(70.0f,
+                                                              (f32) GameInput->ScreenWidth / (f32) GameInput->ScreenHeight,
+                                                              0.1f, 1000.0f);
+            OpenGL_SetUniformMat4F(RenderUnit->ShaderID, "Projection", (f32 *) &ProjectionMat, false);
+            
+            mat4 ViewMat = GetCameraViewMat(&GameState->Camera);
+            OpenGL_SetUniformMat4F(RenderUnit->ShaderID, "View", (f32 *) &ViewMat, false);
+
+            PreviousShaderID = RenderUnit->ShaderID;
+        }
+        
         glBindVertexArray(RenderUnit->VAO);
+
+        u32 TestCounter = 0;
 
         u32 PreviousMaterialID = 0;
         for (u32 MeshIndex = 0;
@@ -386,8 +414,75 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 if (InstanceID > 0)
                 {
                     world_object_instance *Instance = GameState->WorldObjectInstances + InstanceID;
+
+                    world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
+                    imported_model *ImportedModel = Blueprint->ImportedModel;
+
                     mat4 ModelTransform = GetTransformForWorldObjectInstance(Instance);
-                    OpenGL_SetUniformMat4F(GameState->ShaderID, "Model", (f32 *) &ModelTransform, false);
+                    
+                    if (ImportedModel->Armature)
+                    {
+                        imported_armature *Armature = ImportedModel->Armature;
+
+                        MemoryArena_Freeze(&GameState->RenderArena);
+                        
+                        mat4 *BoneTransforms = MemoryArena_PushArray(&GameState->RenderArena, Armature->BoneCount, mat4);
+
+                        BoneTransforms[0] = Mat4Identity();
+                        
+                        for (u32 BoneIndex = 1;
+                             BoneIndex < Armature->BoneCount;
+                             ++BoneIndex)
+                        {
+                            imported_bone *Bone = Armature->Bones + BoneIndex;
+
+                            mat4 *Transform = BoneTransforms + BoneIndex;
+                            
+                            if (Bone->ParentID == 0)
+                            {
+                                *Transform = Bone->TransformToParent;
+                            }
+                            else
+                            {
+                                mat4 *ParentTransform = BoneTransforms + Bone->ParentID;
+
+                                mat4 CustomTransform = Mat4Identity();
+
+                                if (BoneIndex == 6)
+                                {
+                                    CustomTransform =
+                                        Mat4GetRotationFromQuat(QuatGetRotationAroundAxis(vec3 { -1.0f, 0.0f, 0.0f },
+                                                                                          ToRadiansF(GameState->TestAngle +
+                                                                                                     (f32) (TestCounter++) * 60.0f)));
+                                }
+                                
+                                if (BoneIndex == 7)
+                                {
+                                    CustomTransform =
+                                        Mat4GetRotationFromQuat(QuatGetRotationAroundAxis(vec3 { 1.0f, 0.0f, 0.0f },
+                                                                                          ToRadiansF(GameState->TestAngle +
+                                                                                                     (f32) (TestCounter++) * 60.0f)));
+                                }
+                                
+                                *Transform = (*ParentTransform) * Bone->TransformToParent * CustomTransform;
+                            }
+                        }
+
+                        for (u32 BoneIndex = 1;
+                             BoneIndex < Armature->BoneCount;
+                             ++BoneIndex)
+                        {
+                            mat4 BoneTransform = BoneTransforms[BoneIndex] * Armature->Bones[BoneIndex].InverseBindTransform;
+
+                            simple_string UniformName;
+                            sprintf_s(UniformName.D, "BoneTransforms[%d]", BoneIndex);
+                            OpenGL_SetUniformMat4F(RenderUnit->ShaderID, UniformName.D, (f32 *) &BoneTransform, false);
+                        }
+
+                        MemoryArena_Unfreeze(&GameState->RenderArena);
+                    }
+
+                    OpenGL_SetUniformMat4F(RenderUnit->ShaderID, "Model", (f32 *) &ModelTransform, false);
                     // TODO: Should I treat indices as unsigned everywhere?
                     // TODO: Instanced draw?
                     glDrawElementsBaseVertex(GL_TRIANGLES,

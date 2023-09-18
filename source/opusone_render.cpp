@@ -461,7 +461,7 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
 void
 InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
                      u32 MaterialCount, u32 MeshCount, u32 VertexCount, u32 IndexCount,
-                     memory_arena *Arena)
+                     u32 ShaderID, memory_arena *Arena)
 {
     Assert(RenderUnit);
     Assert(MeshCount > 0);
@@ -483,6 +483,8 @@ InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
     RenderUnit->Meshes = MemoryArena_PushArray(Arena, RenderUnit->MaxMeshCount, render_data_mesh);
 
     PrepareVertexDataForRenderUnit(RenderUnit);
+
+    RenderUnit->ShaderID = ShaderID;
 }
 
 void

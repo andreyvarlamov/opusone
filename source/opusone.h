@@ -45,7 +45,7 @@ struct game_state
     u32 WorldObjectInstanceCount;
     world_object_instance *WorldObjectInstances;
 
-    u32 ShaderID;
+    f32 TestAngle;
 };
 
 #endif
