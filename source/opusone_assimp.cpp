@@ -91,6 +91,9 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
 
     imported_model *Model = MemoryArena_PushStruct(AssetArena, imported_model);
 
+    imported_model ZeroModel {};
+    *Model = ZeroModel;
+
     //
     // NOTE: Process material data
     //
@@ -100,20 +103,18 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
         
         Model->MaterialCount = AssimpScene->mNumMaterials + 1; // Material Index 0 -> No Material
         Model->Materials = MemoryArena_PushArray(AssetArena, Model->MaterialCount, imported_material);
-        for (u32 TextureType = 0;
-             TextureType < TEXTURE_TYPE_COUNT;
-             ++TextureType)
-        {
-            Model->Materials[0].TexturePaths[TextureType].Length = 0;
-            Model->Materials[0].TexturePaths[TextureType].D[0] = '\0';
-        }
 
+        imported_material ZeroMaterial {};
+        Model->Materials[0] = ZeroMaterial;
+        
         for (u32 MaterialIndex = 1;
              MaterialIndex < Model->MaterialCount;
              ++MaterialIndex)
         {
             aiMaterial *AssimpMaterial = AssimpScene->mMaterials[MaterialIndex-1];
             imported_material *Material = Model->Materials + MaterialIndex;
+
+            *Material = ZeroMaterial;
 
             aiTextureType TextureTypes[] = { 
                 aiTextureType_DIFFUSE,
@@ -126,9 +127,6 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
                  TextureType < TEXTURE_TYPE_COUNT;
                  ++TextureType)
             {
-                Material->TexturePaths[TextureType].Length = 0;
-                Material->TexturePaths[TextureType].D[0] = '\0';
-                
                 if (aiGetMaterialTextureCount(AssimpMaterial, TextureTypes[TextureType]) > 0)
                 {
                     aiString AssimpTextureFilename;
@@ -144,11 +142,6 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
                 }
             }
         }
-    }
-    else
-    {
-        Model->MaterialCount = 0;
-        Model->Materials = 0;
     }
 
     //
@@ -167,6 +160,13 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
         Model->Armature->BoneCount = BoneCount + 1;
         // TODO: Should I keep bones in a graph instead of converting to a flat list at this point?
         Model->Armature->Bones = MemoryArena_PushArray(AssetArena, Model->Armature->BoneCount, imported_bone);
+        imported_bone ZeroBone {};
+        for (u32 BoneIndex = 0;
+             BoneIndex < Model->Armature->BoneCount;
+             ++BoneIndex)
+        {
+            Model->Armature->Bones[BoneIndex] = ZeroBone;
+        }
 
         MemoryArena_Freeze(AssetArena);
         
@@ -187,6 +187,7 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
             u32 CurrentParent = ParentIDHelperQueue[QueueStart];
             QueueStart++;
 
+            Assert(CurrentBoneIndex < Model->Armature->BoneCount);
             imported_bone *CurrentBone = Model->Armature->Bones + CurrentBoneIndex;
 
             if (CurrentBoneIndex == 0)
@@ -214,12 +215,9 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
 
             CurrentBoneIndex++;
         }
+        Assert(CurrentBoneIndex == Model->Armature->BoneCount);
 
         MemoryArena_Unfreeze(AssetArena);
-    }
-    else
-    {
-        Model->Armature = 0;
     }
     
     //
@@ -234,6 +232,9 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
     {
         aiMesh *AssimpMesh = AssimpScene->mMeshes[MeshIndex];
         imported_mesh *Mesh = &Model->Meshes[MeshIndex];
+
+        imported_mesh ZeroMesh {};
+        *Mesh = ZeroMesh;
 
         //
         // NOTE: Vertex data
@@ -262,10 +263,6 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
                 Mesh->VertexUVs[VertexIndex] = Assimp_ConvertVec2F(AssimpMesh->mTextureCoords[0][VertexIndex]);
             }
         }
-        else
-        {
-            Mesh->VertexUVs = 0;
-        }
         if (AssimpMesh->mColors[0])
         {
             Mesh->VertexColors = MemoryArena_PushArray(AssetArena, Mesh->VertexCount, vec4);
@@ -275,10 +272,6 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
             {
                 Mesh->VertexColors[VertexIndex] = Assimp_ConvertColor4F(AssimpMesh->mColors[0][VertexIndex]);
             }
-        }
-        else
-        {
-            Mesh->VertexColors = 0;
         }
 
         //
@@ -307,17 +300,23 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
         {
             Mesh->MaterialID = AssimpMesh->mMaterialIndex + 1;
         }
-        else
-        {
-            Mesh->MaterialID = 0;
-        }
 
         //
         // NOTE: Bone data
         //
         if (Model->Armature)
         {
-            Mesh->VertexBoneData = MemoryArena_PushArray(AssetArena, Mesh->VertexCount, vertex_bone_data);
+            Mesh->VertexBoneIDs = MemoryArena_PushArray(AssetArena, Mesh->VertexCount, vert_bone_ids);
+            Mesh->VertexBoneWeights = MemoryArena_PushArray(AssetArena, Mesh->VertexCount, vert_bone_weights);
+            vert_bone_ids ZeroBoneIDs {};
+            vert_bone_weights ZeroBoneWeights {};
+            for (u32 VertexIndex = 0;
+                 VertexIndex < Mesh->VertexCount;
+                 ++VertexIndex)
+            {
+                Mesh->VertexBoneIDs[VertexIndex] = ZeroBoneIDs;
+                Mesh->VertexBoneWeights[VertexIndex] = ZeroBoneWeights;
+            }
             
             for (u32 AssimpBoneIndex = 0;
                  AssimpBoneIndex < AssimpMesh->mNumBones;
@@ -327,6 +326,7 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
 
                 // NOTE: Find the bone with the corresponding name among the bones that are already saved in Model->Armature
                 u32 BoneID = 0;
+                b32 BoneFound = false;
                 for (u32 SearchBoneIndex = 0;
                      SearchBoneIndex < Model->Armature->BoneCount;
                      ++SearchBoneIndex)
@@ -334,9 +334,11 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
                     if (CompareStrings(Model->Armature->Bones[SearchBoneIndex].BoneName.D, AssimpBone->mName.C_Str()))
                     {
                         BoneID = SearchBoneIndex;
+                        BoneFound = true;
                         break;
                     }
                 }
+                Assert(BoneFound);
 
                 Model->Armature->Bones[BoneID].InverseBindTransform = Assimp_ConvertMat4F(AssimpBone->mOffsetMatrix);
 
@@ -348,30 +350,26 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
 
                     if (AssimpWeight->mWeight > 0.0f)
                     {
-                        vertex_bone_data *VertexBoneData = Mesh->VertexBoneData + AssimpWeight->mVertexId;
+                        vert_bone_ids *VertexBoneIDs = Mesh->VertexBoneIDs + AssimpWeight->mVertexId;
+                        vert_bone_weights *VertexBoneWeights = Mesh->VertexBoneWeights + AssimpWeight->mVertexId;
 
                         b32 FoundSlotForBone = false;
                         for (u32 SearchEmptySlotIndex = 0;
                              SearchEmptySlotIndex < MAX_BONES_PER_VERTEX;
                              ++SearchEmptySlotIndex)
                         {
-                            if (VertexBoneData->BoneIDs[SearchEmptySlotIndex] == 0)
+                            if (VertexBoneIDs->D[SearchEmptySlotIndex] == 0)
                             {
-                                VertexBoneData->BoneIDs[SearchEmptySlotIndex] = BoneID;
-                                VertexBoneData->BoneWeights[SearchEmptySlotIndex] = AssimpWeight->mWeight;
+                                VertexBoneIDs->D[SearchEmptySlotIndex] = BoneID;
+                                VertexBoneWeights->D[SearchEmptySlotIndex] = AssimpWeight->mWeight;
                                 FoundSlotForBone = true;
                                 break;
                             }
                         }
-                        
                         Assert(FoundSlotForBone);
                     }
                 }
             }
-        }
-        else
-        {
-            Mesh->VertexBoneData = 0;
         }
 
         //
@@ -387,6 +385,8 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
             {
                 aiAnimation *AssimpAnimation = AssimpScene->mAnimations[AnimationIndex];
                 imported_animation *Animation = Model->Animations + AnimationIndex;
+                imported_animation ZeroAnimation {};
+                *Animation = ZeroAnimation;
 
                 Animation->ChannelCount = AssimpAnimation->mNumChannels;
                 Animation->Channels = MemoryArena_PushArray(AssetArena, Animation->ChannelCount, imported_animation_channel);
@@ -399,6 +399,8 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
                 {
                     aiNodeAnim *AssimpChannel = AssimpAnimation->mChannels[ChannelIndex];
                     imported_animation_channel *Channel = Animation->Channels + ChannelIndex;
+                    imported_animation_channel ZeroChannel {};
+                    *Channel = ZeroChannel;
 
                     for (u32 BoneSearchIndex = 1;
                          BoneSearchIndex < Model->Armature->BoneCount;
@@ -458,11 +460,6 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
                     }
                 }
             }
-        }
-        else
-        {
-            Model->Animations = 0;
-            Model->AnimationCount = 0;
         }
 
         Noop;

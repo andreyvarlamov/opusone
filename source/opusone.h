@@ -36,7 +36,8 @@ struct game_state
     
     camera Camera;
 
-    render_unit RenderUnit;
+    render_unit StaticRenderUnit;
+    render_unit SkinnedRenderUnit;
     
     u32 WorldObjectBlueprintCount;
     world_object_blueprint *WorldObjectBlueprints;

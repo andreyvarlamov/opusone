@@ -459,6 +459,33 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
 }
 
 void
+InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
+                     u32 MaterialCount, u32 MeshCount, u32 VertexCount, u32 IndexCount,
+                     memory_arena *Arena)
+{
+    Assert(RenderUnit);
+    Assert(MeshCount > 0);
+    Assert(VertexCount > 0);
+    Assert(IndexCount > 0);
+    Assert(Arena);
+    
+    render_unit ZeroRenderUnit {};
+    *RenderUnit = ZeroRenderUnit;
+
+    RenderUnit->VertSpecType = VertSpecType;
+    RenderUnit->MaterialCount = 1; // Material0 is null
+    RenderUnit->MaxMaterialCount = MaterialCount + 1;
+    RenderUnit->MaxMeshCount = MeshCount;
+    RenderUnit->MaxVertexCount = VertexCount;
+    RenderUnit->MaxIndexCount = IndexCount;
+
+    RenderUnit->Materials = MemoryArena_PushArray(Arena, RenderUnit->MaxMaterialCount, render_data_material);
+    RenderUnit->Meshes = MemoryArena_PushArray(Arena, RenderUnit->MaxMeshCount, render_data_mesh);
+
+    PrepareVertexDataForRenderUnit(RenderUnit);
+}
+
+void
 BindTexturesForMaterial(render_data_material *Material)
 {
     for (u32 TextureIndex = 0;

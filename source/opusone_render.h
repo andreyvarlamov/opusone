@@ -59,9 +59,11 @@ struct render_unit
     u32 MaxIndexCount;
 
     u32 MaterialCount;
+    u32 MaxMaterialCount;
     render_data_material *Materials;
 
     u32 MeshCount;
+    u32 MaxMeshCount;
     render_data_mesh *Meshes;
 
     vert_spec_type VertSpecType;
@@ -116,6 +118,10 @@ void
 SubVertexDataForRenderUnit(render_unit *RenderUnit,
                            void **AttribData, u32 AttribCount, void *IndicesData,
                            u32 VertexToSubCount, u32 IndexToSubCount);
+void
+InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
+                     u32 MaterialCount, u32 MeshCount, u32 VertexCount, u32 IndexCount,
+                     memory_arena *Arena);
 
 void
 BindTexturesForMaterial(render_data_material *Material);

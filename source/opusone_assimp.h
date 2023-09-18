@@ -36,10 +36,14 @@ struct imported_bone
 };
 
 #define MAX_BONES_PER_VERTEX 4
-struct vertex_bone_data
+struct vert_bone_ids
 {
-    u32 BoneIDs[MAX_BONES_PER_VERTEX];
-    f32 BoneWeights[MAX_BONES_PER_VERTEX];
+    u32 D[MAX_BONES_PER_VERTEX];
+};
+
+struct vert_bone_weights
+{
+    f32 D[MAX_BONES_PER_VERTEX];
 };
 
 struct imported_mesh
@@ -55,7 +59,8 @@ struct imported_mesh
     vec4 *VertexColors;
     vec2 *VertexUVs;
 
-    vertex_bone_data *VertexBoneData;
+    vert_bone_ids *VertexBoneIDs;
+    vert_bone_weights *VertexBoneWeights;
     
     i32 *Indices;
 };
