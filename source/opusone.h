@@ -8,6 +8,14 @@
 #include "opusone_assimp.h"
 #include "opusone_render.h"
 
+struct animation_state
+{
+    imported_armature *Armature;
+    imported_animation *Animation;
+
+    double CurrentTicks;
+};
+
 struct world_object_blueprint
 {
     imported_model *ImportedModel;
@@ -24,6 +32,8 @@ struct world_object_instance
     vec3 Position;
     quat Rotation;
     vec3 Scale;
+
+    animation_state *AnimationState;
 };
 
 struct game_state
@@ -44,8 +54,6 @@ struct game_state
     
     u32 WorldObjectInstanceCount;
     world_object_instance *WorldObjectInstances;
-
-    f32 TestAngle;
 };
 
 #endif

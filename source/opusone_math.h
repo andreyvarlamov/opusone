@@ -51,6 +51,12 @@ ArcSinF(f32 Value)
 }
 
 internal inline f32
+ArcCosF(f32 Value)
+{
+    return acosf(Value);
+}
+
+internal inline f32
 ClampF(f32 Value, f32 Min, f32 Max)
 {
     if (Value < Min) return Min;

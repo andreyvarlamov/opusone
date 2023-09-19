@@ -29,6 +29,7 @@ struct imported_bone
 
     // TODO: Hash table to find bones instead of this?
     simple_string BoneName;
+    // TODO: Save this in decomposed state?
     mat4 TransformToParent;
     // TODO: This is in mesh space, but I apply transforms to all objects in Blender,
     // and don't take into account object transforms for now

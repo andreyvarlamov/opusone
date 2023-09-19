@@ -55,14 +55,15 @@ Assimp_ConvertMat4F(aiMatrix4x4 AssimpMat)
 }
 
 internal void
-Assimp_GetArmatureInfoRecursive(aiNode *Node, aiNode **Out_ArmatureNode, u32 *Out_BoneCount)
+Assimp_GetArmatureInfoRecursive(aiNode *Node, aiNode **Out_ArmatureNode, u32 *Out_BoneCount, b32 ArmatureFound)
 {
-    if (*Out_ArmatureNode)
+    if (ArmatureFound)
     {
         (*Out_BoneCount)++;
     }
     else if (CompareStrings(Node->mName.C_Str(), "Armature"))
     {
+        ArmatureFound = true;
         *Out_ArmatureNode = Node;
     }
 
@@ -70,7 +71,7 @@ Assimp_GetArmatureInfoRecursive(aiNode *Node, aiNode **Out_ArmatureNode, u32 *Ou
          ChildIndex < Node->mNumChildren;
          ++ChildIndex)
     {
-        Assimp_GetArmatureInfoRecursive(Node->mChildren[ChildIndex], Out_ArmatureNode, Out_BoneCount);
+        Assimp_GetArmatureInfoRecursive(Node->mChildren[ChildIndex], Out_ArmatureNode, Out_BoneCount, ArmatureFound);
     }
 }
 
@@ -149,7 +150,7 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
     //
     aiNode *ArmatureNode = 0;
     u32 BoneCount = 0;
-    Assimp_GetArmatureInfoRecursive(AssimpScene->mRootNode, &ArmatureNode, &BoneCount);
+    Assimp_GetArmatureInfoRecursive(AssimpScene->mRootNode, &ArmatureNode, &BoneCount, false);
     if (ArmatureNode && BoneCount > 0)
     {
         // TODO: See if this needs to handle more bones
@@ -388,31 +389,37 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
                 imported_animation ZeroAnimation {};
                 *Animation = ZeroAnimation;
 
-                Animation->ChannelCount = AssimpAnimation->mNumChannels;
+                Animation->ChannelCount = AssimpAnimation->mNumChannels + 1;
                 Animation->Channels = MemoryArena_PushArray(AssetArena, Animation->ChannelCount, imported_animation_channel);
                 Animation->TicksDuration = AssimpAnimation->mDuration;
                 Animation->TicksPerSecond = AssimpAnimation->mTicksPerSecond;
                 Animation->AnimationName = SimpleString(AssimpAnimation->mName.C_Str());
-                for (u32 ChannelIndex = 0;
+
+                imported_animation_channel ZeroChannel {};
+                Animation->Channels[0] = ZeroChannel;
+                
+                for (u32 ChannelIndex = 1;
                      ChannelIndex < Animation->ChannelCount;
                      ++ChannelIndex)
                 {
-                    aiNodeAnim *AssimpChannel = AssimpAnimation->mChannels[ChannelIndex];
-                    imported_animation_channel *Channel = Animation->Channels + ChannelIndex;
-                    imported_animation_channel ZeroChannel {};
-                    *Channel = ZeroChannel;
+                    aiNodeAnim *AssimpChannel = AssimpAnimation->mChannels[ChannelIndex-1];
 
+                    u32 BoneID = 0;
                     for (u32 BoneSearchIndex = 1;
                          BoneSearchIndex < Model->Armature->BoneCount;
                          ++BoneSearchIndex)
                     {
                         if (CompareStrings(Model->Armature->Bones[BoneSearchIndex].BoneName.D, AssimpChannel->mNodeName.C_Str()))
                         {
-                            Channel->BoneID = BoneSearchIndex;
+                            BoneID = BoneSearchIndex;
                             break;
                         }
                     }
-                    Assert(Channel->BoneID > 0);
+                    Assert(BoneID > 0);
+
+                    imported_animation_channel *Channel = Animation->Channels + BoneID;
+
+                    Channel->BoneID = BoneID;
                     
                     Channel->PositionKeyCount = AssimpChannel->mNumPositionKeys;
                     Channel->PositionKeys = MemoryArena_PushArray(AssetArena, Channel->PositionKeyCount, vec3);

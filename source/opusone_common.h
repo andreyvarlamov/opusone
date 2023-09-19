@@ -141,18 +141,18 @@ inline b32
 CompareStrings(const char *A, const char *B)
 {
     u32 Index = 0;
-    
-    while (A[Index] != '\0' && B[Index] != '\0')
+
+    while (A[Index] != '\0')
     {
-        if (A[Index] != B[Index])
+        if (B[Index] == '\0' || (A[Index] != B[Index]))
         {
             return false;
         }
-        
+
         Index++;
     }
 
-    return true;
+    return (B[Index] == '\0');
 }
 
 struct memory_arena

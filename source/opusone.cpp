@@ -10,27 +10,17 @@
 #include <cstdio>
 #include <glad/glad.h>
 
-inline mat4
-GetTransformForWorldObjectInstance(world_object_instance *Instance)
-{
-    // TODO: This can probably be optimized a lot
-    mat4 Translation = Mat4GetTranslation(Instance->Position);
-    mat4 Rotation = Mat4GetRotationFromQuat(Instance->Rotation);
-    mat4 Scale = Mat4GetScale(Instance->Scale);
-    
-    mat4 Result = Translation * Rotation * Scale;
-    return Result;
-}
-
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameShouldQuit)
 {
     game_state *GameState = (game_state *) GameMemory->Storage;
+
+    //
+    // NOTE: First frame/initialization
+    //
     if (!GameMemory->IsInitialized)
     {
         GameMemory->IsInitialized = true;
-
-        GameState->TestAngle = 0.0f;
 
         // TODO: Allocate more than game_state size? Better if I do hot-reloading in the future
         // NOTE: Not sure if nested arenas are a good idea, but I will go with it for now
@@ -60,7 +50,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         //
         simple_string ModelPaths[] = {
             SimpleString("resources/models/box_room/BoxRoom.gltf"),
-            SimpleString("resources/models/adam/adam.gltf")
+            SimpleString("resources/models/adam/adam_new.gltf"),
+            SimpleString("resources/models/complex_animation_keys/AnimationStudy2c.gltf")
         };
 
         GameState->WorldObjectBlueprintCount = ArrayCount(ModelPaths) + 1;
@@ -274,28 +265,16 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         // NOTE: Add instances of world object blueprints
         //
         world_object_instance Instances[] = {
-            world_object_instance { 1, vec3 { 0.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 1, vec3 { 20.0f, 0.0f, 0.0f }, QuatGetRotationAroundAxis(vec3 { 0.0f, 1.0f, 1.0f }, ToRadiansF(45.0f)), vec3 { 0.5f, 1.0f, 2.0f } },
-            world_object_instance { 1, vec3 { 0.0f, 0.0f, -30.0f }, QuatGetRotationAroundAxis(vec3 { 1.0f, 1.0f, 1.0f }, ToRadiansF(160.0f)), vec3 { 1.0f, 1.0f, 5.0f } },
-            world_object_instance { 2, vec3 { 0.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 0.0f, 0.0f, 1.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 0.0f, 0.0f, 2.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 0.0f, 0.0f, 3.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
+            world_object_instance { 1, vec3 { 0.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
+            world_object_instance { 1, vec3 { 20.0f, 0.0f, 0.0f }, QuatGetRotationAroundAxis(vec3 { 0.0f, 1.0f, 1.0f }, ToRadiansF(45.0f)), vec3 { 0.5f, 1.0f, 2.0f }, 0 },
+            world_object_instance { 1, vec3 { 0.0f, 0.0f, -30.0f }, QuatGetRotationAroundAxis(vec3 { 1.0f, 1.0f, 1.0f }, ToRadiansF(160.0f)), vec3 { 1.0f, 1.0f, 5.0f }, 0 },
 
-            world_object_instance { 2, vec3 { 1.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 1.0f, 0.0f, 1.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 1.0f, 0.0f, 2.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 1.0f, 0.0f, 3.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
+            world_object_instance { 2, vec3 { 0.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
+            world_object_instance { 2, vec3 { -1.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
+            world_object_instance { 2, vec3 { 1.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
+            world_object_instance { 2, vec3 { 2.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
 
-            world_object_instance { 2, vec3 { 2.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 2.0f, 0.0f, 1.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 2.0f, 0.0f, 2.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 2.0f, 0.0f, 3.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-
-            world_object_instance { 2, vec3 { 3.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 3.0f, 0.0f, 1.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 3.0f, 0.0f, 2.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } },
-            world_object_instance { 2, vec3 { 3.0f, 0.0f, 3.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f } }
+            world_object_instance { 3, vec3 { 0.0f, 0.0f, -3.0f }, QuatGetNeutral(), vec3 { 0.3f, 0.3f, 0.3f }, 0 },
         };
 
         GameState->WorldObjectInstanceCount = ArrayCount(Instances) + 1;
@@ -313,6 +292,32 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             Assert(Instance->BlueprintID > 0);
             
             world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
+
+            if (Blueprint->ImportedModel->Armature)
+            {
+                Assert(Blueprint->ImportedModel->Animations);
+                Assert(Blueprint->ImportedModel->AnimationCount > 0);
+
+                Instance->AnimationState = MemoryArena_PushStruct(&GameState->WorldArena, animation_state);
+
+                Instance->AnimationState->Armature = Blueprint->ImportedModel->Armature;
+                
+                if (Instance->BlueprintID == 2)
+                {
+                    // NOTE: Adam: default animation - running
+                    Instance->AnimationState->Animation = Blueprint->ImportedModel->Animations + 2;
+                }
+                else if (Instance->BlueprintID == 3)
+                {
+                    Instance->AnimationState->Animation = Blueprint->ImportedModel->Animations;
+                }
+                else
+                {
+                    // NOTE: All models with armature should have animation in animation state set
+                    InvalidCodePath;
+                }
+                Instance->AnimationState->CurrentTicks = 0.0f;
+            }
 
             render_unit *RenderUnit = Blueprint->RenderUnit;
 
@@ -339,25 +344,45 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 
+    //
+    // NOTE: Misc controls
+    //
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_ESCAPE])
     {
         *GameShouldQuit = true;
     }
 
+    //
+    // NOTE: Camera
+    //
     UpdateCameraForFrame(GameState, GameInput);
 
-    GameState->TestAngle += GameInput->DeltaTime * 90.0f;
-    if (GameState->TestAngle > 360.0f)
+    //
+    // NOTE: Game logic update
+    //
+    for (u32 InstanceIndex = 0;
+         InstanceIndex < GameState->WorldObjectInstanceCount;
+         ++InstanceIndex)
     {
-        GameState->TestAngle -= 360.0f;
+        world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
+
+        if (Instance->AnimationState)
+        {
+            f32 DeltaTicks = (f32) (GameInput->DeltaTime * (Instance->AnimationState->Animation->TicksPerSecond));
+            Instance->AnimationState->CurrentTicks += DeltaTicks;
+            if (Instance->AnimationState->CurrentTicks >= Instance->AnimationState->Animation->TicksDuration)
+            {
+                Instance->AnimationState->CurrentTicks -= Instance->AnimationState->Animation->TicksDuration;
+            }
+        }
     }
-    
+
+    //
+    // NOTE: Render
+    //
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    //
-    // NOTE: Render each render unit
-    //
     render_unit *RenderUnits[] = { &GameState->StaticRenderUnit, &GameState->SkinnedRenderUnit };
     
     u32 PreviousShaderID = 0;
@@ -413,16 +438,18 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 u32 InstanceID = Mesh->InstanceIDs[InstanceSlotIndex];
                 if (InstanceID > 0)
                 {
+                    // b32 ShouldLog = (InstanceID == 5);
                     world_object_instance *Instance = GameState->WorldObjectInstances + InstanceID;
 
-                    world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
-                    imported_model *ImportedModel = Blueprint->ImportedModel;
-
-                    mat4 ModelTransform = GetTransformForWorldObjectInstance(Instance);
+                    mat4 ModelTransform = Mat4GetFullTransform(Instance->Position, Instance->Rotation, Instance->Scale);
                     
-                    if (ImportedModel->Armature)
+                    if (Instance->AnimationState)
                     {
-                        imported_armature *Armature = ImportedModel->Armature;
+                        animation_state *AnimationState = Instance->AnimationState;
+                        imported_armature *Armature = AnimationState->Armature;
+                        imported_animation *Animation = AnimationState->Animation;
+                        Assert(Armature);
+                        Assert(Animation);
 
                         MemoryArena_Freeze(&GameState->RenderArena);
                         
@@ -438,36 +465,156 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
                             mat4 *Transform = BoneTransforms + BoneIndex;
                             
+                            imported_animation_channel *Channel = Animation->Channels + BoneIndex;
+                            Assert(Channel->BoneID == BoneIndex);
+
+                            // NOTE: Can't just use a "no change" key, because animation is supposed
+                            // to include bone's transform to parent. If there are such cases, will
+                            // need to handle them specially
+                            Assert(Channel->PositionKeyCount != 0);
+                            Assert(Channel->RotationKeyCount != 0);
+                            Assert(Channel->ScaleKeyCount != 0);
+
+                            vec3 Position {};
+
+                            if (Channel->PositionKeyCount == 1)
+                            {
+                                Position = Channel->PositionKeys[0];
+                            }
+                            else if (Channel->PositionKeyCount > 1)
+                            {
+                                u32 PrevTimeIndex = 0;
+                                u32 TimeIndex = 0;
+                                for (;
+                                     TimeIndex < Channel->PositionKeyCount;
+                                     ++TimeIndex)
+                                {
+                                    if (AnimationState->CurrentTicks <= Channel->PositionKeyTimes[TimeIndex])
+                                    {
+                                        break;
+                                    }
+                                    PrevTimeIndex = TimeIndex;
+                                }
+                                Assert(TimeIndex < Channel->PositionKeyCount);
+                                // NOTE: If the current animation time is at exactly 0.0, both keys will be the same,
+                                // lerp will have no effect. No need to branch, because that should happen only rarely anyways.
+                                
+                                vec3 PositionA = Channel->PositionKeys[PrevTimeIndex];
+                                vec3 PositionB = Channel->PositionKeys[TimeIndex];
+
+                                f32 T = (f32) ((AnimationState->CurrentTicks - Channel->PositionKeyTimes[PrevTimeIndex]) /
+                                               (Channel->PositionKeyTimes[TimeIndex] - Channel->PositionKeyTimes[PrevTimeIndex]));
+
+                                Position = Vec3Lerp(PositionA, PositionB, T);
+
+#if 0
+                                if (ShouldLog && PrevTimeIndex == 0)
+                                {
+                                    printf("[%s]-P-(%d)<%0.3f,%0.3f,%0.3f>:(%d)<%0.3f,%0.3f,%0.3f>[%0.3f]<%0.3f,%0.3f,%0.3f>\n",
+                                           Bone->BoneName.D,
+                                           PrevTimeIndex, PositionA.X, PositionA.Y, PositionA.Z,
+                                           TimeIndex, PositionB.X, PositionB.Y, PositionB.Z,
+                                           T, Position.X, Position.Y, Position.Z);
+                                }
+#endif
+                            }
+                            
+                            quat Rotation = QuatGetNeutral();
+
+                            if (Channel->RotationKeyCount == 1)
+                            {
+                                Rotation = Channel->RotationKeys[0];
+                            }
+                            else if (Channel->PositionKeyCount > 1)
+                            {
+                                u32 PrevTimeIndex = 0;
+                                u32 TimeIndex = 0;
+                                for (;
+                                     TimeIndex < Channel->PositionKeyCount;
+                                     ++TimeIndex)
+                                {
+                                    if (AnimationState->CurrentTicks <= Channel->RotationKeyTimes[TimeIndex])
+                                    {
+                                        break;
+                                    }
+                                    PrevTimeIndex = TimeIndex;
+                                }
+                                Assert(TimeIndex < Channel->RotationKeyCount);
+
+                                quat RotationA = Channel->RotationKeys[PrevTimeIndex];
+                                quat RotationB = Channel->RotationKeys[TimeIndex];
+
+                                f32 T = (f32) ((AnimationState->CurrentTicks - Channel->RotationKeyTimes[PrevTimeIndex]) /
+                                               (Channel->RotationKeyTimes[TimeIndex] - Channel->RotationKeyTimes[PrevTimeIndex]));
+
+                                Rotation = QuatSphericalLerp(RotationA, RotationB, T);
+
+#if 0
+                                if (ShouldLog && PrevTimeIndex == 0)
+                                {
+                                    printf("[%s]-R-(%d)<%0.3f,%0.3f,%0.3f,%0.3f>:(%d)<%0.3f,%0.3f,%0.3f,%0.3f>[%0.3f]<%0.3f,%0.3f,%0.3f,%0.3f>\n",
+                                           Bone->BoneName.D,
+                                           PrevTimeIndex, RotationA.W, RotationA.X, RotationA.Y, RotationA.Z,
+                                           TimeIndex, RotationB.W, RotationB.X, RotationB.Y, RotationB.Z,
+                                           T, Rotation.W, Rotation.X, Rotation.Y, Rotation.Z);
+                                }
+#endif
+                            }
+                            
+                            vec3 Scale { 1.0f, 1.0f, 1.0f };
+
+                            if (Channel->ScaleKeyCount == 1)
+                            {
+                                Scale = Channel->ScaleKeys[0];
+                            }
+                            else if (Channel->ScaleKeyCount > 1)
+                            {
+                                u32 PrevTimeIndex = 0;
+                                u32 TimeIndex = 0;
+                                for (;
+                                     TimeIndex < Channel->ScaleKeyCount;
+                                     ++TimeIndex)
+                                {
+                                    if (AnimationState->CurrentTicks <= Channel->ScaleKeyTimes[TimeIndex])
+                                    {
+                                        break;
+                                    }
+                                    PrevTimeIndex = TimeIndex;
+                                }
+                                Assert(TimeIndex < Channel->RotationKeyCount);
+
+                                vec3 ScaleA = Channel->ScaleKeys[PrevTimeIndex];
+                                vec3 ScaleB = Channel->ScaleKeys[TimeIndex];
+
+                                f32 T = (f32) ((AnimationState->CurrentTicks - Channel->ScaleKeyTimes[PrevTimeIndex]) /
+                                               (Channel->ScaleKeyTimes[TimeIndex] - Channel->ScaleKeyTimes[PrevTimeIndex]));
+
+                                Scale = Vec3Lerp(ScaleA, ScaleB, T);
+
+#if 0
+                                if (ShouldLog && PrevTimeIndex == 0)
+                                {
+                                    printf("[%s]-S-(%d)<%0.3f,%0.3f,%0.3f>:(%d)<%0.3f,%0.3f,%0.3f>[%0.3f]<%0.3f,%0.3f,%0.3f>\n",
+                                           Bone->BoneName.D,
+                                           PrevTimeIndex, ScaleA.X, ScaleA.Y, ScaleA.Z,
+                                           TimeIndex, ScaleB.X, ScaleB.Y, ScaleB.Z,
+                                           T, Scale.X, Scale.Y, Scale.Z);
+                                }
+#endif
+                            }
+
+                            mat4 AnimationTransform = Mat4GetFullTransform(Position, Rotation, Scale);
+                            
                             if (Bone->ParentID == 0)
                             {
-                                *Transform = Bone->TransformToParent;
+                                *Transform = AnimationTransform;
                             }
                             else
                             {
-                                mat4 *ParentTransform = BoneTransforms + Bone->ParentID;
-
-                                mat4 CustomTransform = Mat4Identity();
-
-                                if (BoneIndex == 6)
-                                {
-                                    CustomTransform =
-                                        Mat4GetRotationFromQuat(QuatGetRotationAroundAxis(vec3 { -1.0f, 0.0f, 0.0f },
-                                                                                          ToRadiansF(GameState->TestAngle +
-                                                                                                     (f32) (TestCounter++) * 60.0f)));
-                                }
-                                
-                                if (BoneIndex == 7)
-                                {
-                                    CustomTransform =
-                                        Mat4GetRotationFromQuat(QuatGetRotationAroundAxis(vec3 { 1.0f, 0.0f, 0.0f },
-                                                                                          ToRadiansF(GameState->TestAngle +
-                                                                                                     (f32) (TestCounter++) * 60.0f)));
-                                }
-                                
-                                *Transform = (*ParentTransform) * Bone->TransformToParent * CustomTransform;
+                                *Transform = BoneTransforms[Bone->ParentID] * AnimationTransform;
                             }
                         }
-
+                        
                         for (u32 BoneIndex = 1;
                              BoneIndex < Armature->BoneCount;
                              ++BoneIndex)

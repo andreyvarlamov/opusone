@@ -257,6 +257,13 @@ VecSphericalToCartesian(f32 Theta, f32 Phi)
     return Result;
 }
 
+internal inline vec3
+Vec3Lerp(vec3 A, vec3 B, f32 LerpFactor)
+{
+    vec3 Result = A + LerpFactor * (B - A);
+    return Result;
+}
+
 // -------------------------------------------------------------------------------
 // VECTOR 4 ----------------------------------------------------------------------
 // -------------------------------------------------------------------------------
@@ -320,7 +327,42 @@ union quat
     f32 E[4];
 };
 
-quat
+internal inline quat
+operator-(quat Q)
+{
+    quat Result = quat { -Q.W, -Q.X, -Q.Y, -Q.Z };
+    return Result;
+}
+
+internal inline quat
+operator*(f32 Scalar, quat Q)
+{
+    quat Result = { Scalar * Q.W, Scalar * Q.X, Scalar * Q.Y, Scalar * Q.Z };
+    return Result;
+}
+
+internal inline quat
+operator*(quat Q, f32 Scalar)
+{
+    quat Result = (Scalar * Q);
+    return Result;
+}
+
+internal inline quat
+operator/(quat Q, f32 Scalar)
+{
+    quat Result = { Q.W / Scalar, Q.X / Scalar, Q.Y / Scalar, Q.Z / Scalar };
+    return Result;
+}
+
+internal inline quat
+operator+(quat A, quat B)
+{
+    quat Result = quat { A.W + B.W, A.X + B.X, A.Y + B.Y, A.Z + B.Z };
+    return Result;
+}
+
+internal inline quat
 QuatGetNeutral()
 {
     quat Result {};
@@ -330,7 +372,7 @@ QuatGetNeutral()
     return Result;
 }
 
-quat
+internal inline quat
 QuatGetRotationAroundAxis(vec3 Axis, f32 AngleRads)
 {
     quat Result {};
@@ -344,6 +386,46 @@ QuatGetRotationAroundAxis(vec3 Axis, f32 AngleRads)
     Result.Y = Axis.Y * SinF(HalfAngle);
     Result.Z = Axis.Z * SinF(HalfAngle);
 
+    return Result;
+}
+
+internal inline f32
+QuatDot(quat A, quat B)
+{
+    f32 Result = A.W * B.W + A.X * B.X + A.Y * B.Y + A.Z * B.Z;
+    return Result;
+}
+
+internal inline quat
+QuatSphericalLerp(quat A, quat B, f32 LerpFactor)
+{
+    // NOTE: Copy the homework from glm::slerp
+
+    f32 CosTheta = QuatDot(A, B);
+
+    // NOTE: If CosTheta < 0, the interpolation will take the long way around the sphere.
+    // To fix this, negate one quat
+    if (CosTheta < 0.0f)
+    {
+        B = -B;
+        CosTheta -= CosTheta;
+    }
+
+    // NOTE: Perform a linear interpolation when CosTheta is close to 1 to avoid side effect
+    // of sin(angle) becoming a zero denominator
+    if (CosTheta >= (1.0f - FLT_EPSILON))
+    {
+        return quat {
+            A.W + LerpFactor * (B.W - A.W),
+            A.X + LerpFactor * (B.X - A.X),
+            A.Y + LerpFactor * (B.Y - A.Y),
+            A.Z + LerpFactor * (B.Z - A.Z)
+        };
+    }
+
+    // NOTE: Essential Mathematics, p. 467
+    f32 Angle = ArcCosF(CosTheta);
+    quat Result = (SinF((1 - LerpFactor) * Angle) * A + SinF(LerpFactor * Angle) * B) / SinF(Angle);
     return Result;
 }
 
@@ -693,6 +775,18 @@ Mat4GetScale(vec3 Scale)
     Result.E[1][1] = Scale.Y;
     Result.E[2][2] = Scale.Z;
 
+    return Result;
+}
+
+internal inline mat4
+Mat4GetFullTransform(vec3 Position, quat Rotation, vec3 Scale)
+{
+    // TODO: This can probably be optimized a lot
+    mat4 TranslationTransform = Mat4GetTranslation(Position);
+    mat4 RotationTransform = Mat4GetRotationFromQuat(Rotation);
+    mat4 ScaleTransform = Mat4GetScale(Scale);
+    
+    mat4 Result = TranslationTransform * RotationTransform * ScaleTransform;
     return Result;
 }
 
