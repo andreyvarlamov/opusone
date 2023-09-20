@@ -1,16 +1,16 @@
 #version 330 core
 
 layout (location = 0) in vec3  In_Position;
-layout (location = 1) in vec3  In_Tangents;
-layout (location = 2) in vec3  In_Bitangents;
-layout (location = 3) in vec3  In_Normals;
+layout (location = 1) in vec3  In_Tangent;
+layout (location = 2) in vec3  In_Bitangent;
+layout (location = 3) in vec3  In_Normal;
 layout (location = 4) in vec4  In_Color;
-layout (location = 5) in vec2  In_UVs;
+layout (location = 5) in vec2  In_UV;
 layout (location = 6) in ivec4 In_BoneIDs;
 layout (location = 7) in vec4  In_BoneWeights;
 
-out vec3 VS_Color;
-out vec2 VS_UVs;
+out vec4 VS_Color;
+out vec2 VS_UV;
 
 uniform mat4 Projection;
 uniform mat4 View;
@@ -34,5 +34,5 @@ void main()
                                         In_BoneWeights[3] * B3_P);
 
         gl_Position = Projection * View * Model * BoneTransformedPosition;
-        VS_UVs = In_UVs;
+        VS_UV = In_UV;
 }

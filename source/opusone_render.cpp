@@ -382,6 +382,41 @@ PrepareVertexDataForRenderUnit(render_unit *RenderUnit)
                                            &RenderUnit->VAO, &RenderUnit->VBO, &RenderUnit->EBO);
         } break;
 
+        case VERT_SPEC_DEBUG_DRAW:
+        {
+            size_t AttribStrides[] = {
+                sizeof(vec3),
+                sizeof(vec3),
+                sizeof(vec4)
+            };
+
+            u8 AttribComponentCounts[] = {
+                3,
+                3,
+                4
+            };
+
+            GLenum GLDataTypes[] = {
+                GL_FLOAT,
+                GL_FLOAT,
+                GL_FLOAT
+            };
+
+            gl_vert_attrib_type GLAttribTypes[] = {
+                OO_GL_VERT_ATTRIB_FLOAT,
+                OO_GL_VERT_ATTRIB_FLOAT,
+                OO_GL_VERT_ATTRIB_FLOAT,
+            };
+            
+            u32 AttribCount = ArrayCount(AttribStrides);
+
+            OpenGL_PrepareVertexDataHelper(RenderUnit->MaxVertexCount, RenderUnit->MaxIndexCount,
+                                           AttribStrides, AttribComponentCounts,
+                                           GLDataTypes, GLAttribTypes, AttribCount,
+                                           sizeof(i32), GL_DYNAMIC_DRAW,
+                                           &RenderUnit->VAO, &RenderUnit->VBO, &RenderUnit->EBO);
+        } break;
+        
         default:
         {
             InvalidCodePath;
@@ -451,6 +486,25 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
             RenderUnit->IndexCount += IndexToSubCount;
         } break;
 
+        case VERT_SPEC_DEBUG_DRAW:
+        {
+            size_t AttribStrides[] = {
+                sizeof(vec3),
+                sizeof(vec3),
+                sizeof(vec4)
+            };
+
+            Assert(AttribCount == ArrayCount(AttribStrides));
+
+            OpenGL_SubVertexDataHelper(RenderUnit->VertexCount, VertexToSubCount, RenderUnit->MaxVertexCount,
+                                       RenderUnit->IndexCount, IndexToSubCount,
+                                       AttribStrides, AttribCount, sizeof(i32),
+                                       RenderUnit->VBO, RenderUnit->EBO, AttribData, IndicesData);
+
+            RenderUnit->VertexCount += VertexToSubCount;
+            RenderUnit->IndexCount += IndexToSubCount;
+        } break;
+
         default:
         {
             InvalidCodePath;
@@ -460,27 +514,27 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
 
 void
 InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
-                     u32 MaterialCount, u32 MeshCount, u32 VertexCount, u32 IndexCount,
-                     u32 ShaderID, memory_arena *Arena)
+                     u32 MaxMaterialCount, u32 MaxMarkerCount, u32 MaxVertexCount, u32 MaxIndexCount,
+                     b32 IsImmediate, u32 ShaderID, memory_arena *Arena)
 {
     Assert(RenderUnit);
-    Assert(MeshCount > 0);
-    Assert(VertexCount > 0);
-    Assert(IndexCount > 0);
+    Assert(MaxMarkerCount > 0);
+    Assert(MaxVertexCount > 0);
+    Assert(MaxIndexCount > 0);
     Assert(Arena);
     
-    render_unit ZeroRenderUnit {};
-    *RenderUnit = ZeroRenderUnit;
+    *RenderUnit = {};
 
     RenderUnit->VertSpecType = VertSpecType;
     RenderUnit->MaterialCount = 1; // Material0 is null
-    RenderUnit->MaxMaterialCount = MaterialCount + 1;
-    RenderUnit->MaxMeshCount = MeshCount;
-    RenderUnit->MaxVertexCount = VertexCount;
-    RenderUnit->MaxIndexCount = IndexCount;
+    RenderUnit->MaxMaterialCount = RenderUnit->MaterialCount + MaxMaterialCount;
+    RenderUnit->MaxMarkerCount = MaxMarkerCount;
+    RenderUnit->MaxVertexCount = MaxVertexCount;
+    RenderUnit->MaxIndexCount = MaxIndexCount;
+    RenderUnit->IsImmediate = IsImmediate;
 
     RenderUnit->Materials = MemoryArena_PushArray(Arena, RenderUnit->MaxMaterialCount, render_data_material);
-    RenderUnit->Meshes = MemoryArena_PushArray(Arena, RenderUnit->MaxMeshCount, render_data_mesh);
+    RenderUnit->Markers = MemoryArena_PushArray(Arena, RenderUnit->MaxMarkerCount, render_marker);
 
     PrepareVertexDataForRenderUnit(RenderUnit);
 

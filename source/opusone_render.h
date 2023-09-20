@@ -16,12 +16,19 @@ enum vert_spec_type
 {
     VERT_SPEC_STATIC_MESH,
     VERT_SPEC_SKINNED_MESH,
+    VERT_SPEC_DEBUG_DRAW,
     VERT_SPEC_COUNT
 };
 
 struct render_data_material
 {
     u32 TextureIDs[TEXTURE_TYPE_COUNT];
+};
+
+enum render_state_type
+{
+    RENDER_STATE_MESH,
+    RENDER_STATE_DEBUG
 };
 
 // TODO: Should world object instance just point to a mesh?
@@ -35,15 +42,31 @@ struct render_data_material
 // matrices, and put them in the right order for the renderer.
 // Also this will decouple render data from world_object/entity/position, which is more of a game logic thing.
 #define MAX_INSTANCES_PER_MESH 16
-struct render_data_mesh
+struct render_state_mesh
+{
+    u32 MaterialID;
+    u32 InstanceIDs[MAX_INSTANCES_PER_MESH];
+};
+
+struct render_state_debug
+{
+    vec3 Color;
+    b32 IsWireframe;
+};
+
+struct render_marker
 {
     u32 BaseVertexIndex; // NOTE: E.g. Index #0 for mesh will point to Index #BaseVertexIndex for render unit
     u32 StartingIndex;
     u32 IndexCount;
 
-    u32 MaterialID;
+    union render_state
+    {
+        render_state_mesh Mesh;
+        render_state_debug Debug;
+    } StateD;
 
-    u32 InstanceIDs[MAX_INSTANCES_PER_MESH];
+    render_state_type StateT;
 };
 
 struct render_unit
@@ -60,13 +83,15 @@ struct render_unit
     u32 IndexCount;
     u32 MaxIndexCount;
 
+    b32 IsImmediate;
+
     u32 MaterialCount;
     u32 MaxMaterialCount;
     render_data_material *Materials;
 
-    u32 MeshCount;
-    u32 MaxMeshCount;
-    render_data_mesh *Meshes;
+    u32 MarkerCount;
+    u32 MaxMarkerCount;
+    render_marker *Markers;
 
     vert_spec_type VertSpecType;
     
@@ -122,8 +147,8 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
                            u32 VertexToSubCount, u32 IndexToSubCount);
 void
 InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
-                     u32 MaterialCount, u32 MeshCount, u32 VertexCount, u32 IndexCount,
-                     u32 ShaderID, memory_arena *Arena);
+                     u32 MaxMaterialCount, u32 MaxMarkerCount, u32 MaxVertexCount, u32 MaxIndexCount,
+                     b32 IsImmediate, u32 ShaderID, memory_arena *Arena);
 
 void
 BindTexturesForMaterial(render_data_material *Material);

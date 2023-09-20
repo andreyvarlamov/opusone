@@ -1,21 +1,24 @@
 TODO:
 - Mesh shader improvements
-	- Handle vertex colors with UVs (+ colors and no UVs and vice versa)
-	- Handle normal transforms for skinned meshes
-	- Basic lighting
+    - Handle vertex colors with UVs (+ colors and no UVs and vice versa)
+    - Handle normal transforms for skinned meshes
+    - Basic lighting
 - More rendering
-	- Debug shapes: bounding boxes, spheres, capsules, wireframe triangles; vectors, points, coordinate systems
-	- Render text and immediate UI for debugging
-	- Some kind of screen-space visualization tools. for example plots
-	- Instancing
+    - Debug rendering:
+        - More bounding shapes: spheres, capsules, wireframe triangles; vectors, points, coordinate systems
+    - Consider switching to only one render unit marker type per render unit
+    - Render text and immediate UI for debugging
+    - Some kind of screen-space visualization tools. for example plots
+    - Instancing
 - Collisions
-	- Basic AABBs
-	- AABB Triangle
-	- Basic mouse picking
-- Improving animation system
-	- Animation blending
-	- Animation states
-	- Determine the best export setup (ease of use in dcc + performance)
-	- Handling edge cases/not quite correct export setup better
-	- Numerical robustness - eliminate jitter (investigate, might not be such a big problem now)
-	- Consider creating a custom Blender exporter
+    - Basic AABBs
+    - AABB Triangle
+    - Basic mouse picking
+- Improving animation
+    - Animation blending
+    - Animation states
+    - Determine the best export setup (ease of use in dcc + performance)
+    - Handling edge cases/not quite correct export setup better
+    - Numerical robustness - eliminate jitter (investigate, might not be such a big problem now)
+    - Consider creating a custom Blender exporter
+

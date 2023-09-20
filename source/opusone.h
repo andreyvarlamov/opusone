@@ -48,6 +48,7 @@ struct game_state
 
     render_unit StaticRenderUnit;
     render_unit SkinnedRenderUnit;
+    render_unit DebugDrawRenderUnit;
     
     u32 WorldObjectBlueprintCount;
     world_object_blueprint *WorldObjectBlueprints;
