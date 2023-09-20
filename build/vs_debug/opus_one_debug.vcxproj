@@ -22,6 +22,7 @@
     <ClCompile Include="..\..\source\opusone.cpp" />
     <ClCompile Include="..\..\source\opusone_assimp.cpp" />
     <ClCompile Include="..\..\source\opusone_camera.cpp" />
+    <ClCompile Include="..\..\source\opusone_debug_draw.cpp" />
     <ClCompile Include="..\..\source\opusone_render.cpp" />
     <ClCompile Include="..\..\source\sdl_opusone.cpp" />
   </ItemGroup>
@@ -37,6 +38,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\Basic.fs" />
+    <None Include="..\..\resources\shaders\DebugDraw.fs" />
+    <None Include="..\..\resources\shaders\DebugDraw.vs" />
     <None Include="..\..\resources\shaders\SkinnedMesh.vs" />
     <None Include="..\..\resources\shaders\StaticMesh.vs" />
   </ItemGroup>

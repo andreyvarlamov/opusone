@@ -21,6 +21,24 @@ union vec2
 };
 
 internal inline vec2
+Vec2()
+{
+    vec2 Result = {};
+    return Result;
+}
+
+internal inline vec2
+Vec2(f32 X, f32 Y)
+{
+    vec2 Result = {};
+
+    Result.X = X;
+    Result.Y = Y;
+
+    return Result;
+}
+
+internal inline vec2
 operator+(vec2 V0, vec2 V1)
 {
     return vec2 { V0.X + V1.X, V0.Y + V1.Y };
@@ -128,6 +146,24 @@ union vec3
     f32 E[3];
 };
 
+internal inline vec3
+Vec3()
+{
+    vec3 Result = {};
+    return Result;
+}
+
+internal inline vec3
+Vec3(f32 X, f32 Y, f32 Z)
+{
+    vec3 Result = {};
+
+    Result.X = X;
+    Result.Y = Y;
+    Result.Z = Z;
+
+    return Result;
+}
 
 internal inline vec3
 operator+(vec3 V0, vec3 V1)
@@ -284,6 +320,40 @@ union vec4
 };
 
 internal inline vec4
+Vec4()
+{
+    vec4 Result = {};
+    return Result;
+}
+
+internal inline vec4
+Vec4(f32 X, f32 Y, f32 Z, f32 W)
+{
+    vec4 Result = {};
+
+    Result.X = X;
+    Result.Y = Y;
+    Result.Z = Z;
+    Result.W = W;
+
+    return Result;
+}
+
+internal inline vec4
+Vec4(vec3 V, f32 W)
+{
+    vec4 Result = Vec4(V.X, V.Y, V.Z, W);
+    return Result;
+}
+
+internal inline vec4
+Vec4(vec3 V)
+{
+    vec4 Result = Vec4(V, 0.0f);
+    return Result;
+}
+
+internal inline vec4
 operator+(vec4 V0, vec4 V1);
 
 internal inline vec4
@@ -328,6 +398,42 @@ union quat
 };
 
 internal inline quat
+Quat()
+{
+    quat Result =  {};
+    Result.W = 1.0f;
+    return Result;
+}
+
+internal inline quat
+Quat(f32 W, f32 X, f32 Y, f32 Z)
+{
+    quat Result =  {};
+
+    Result.W = W;
+    Result.X = X;
+    Result.Y = Y;
+    Result.Z = Z;
+    
+    return Result;
+}
+
+internal inline quat
+Quat(vec3 Axis, f32 AngleRads)
+{
+    f32 HalfAngle = AngleRads * 0.5f;
+
+    Axis = VecNormalize(Axis);
+    
+    quat Result = Quat(CosF(HalfAngle),
+                       Axis.X * SinF(HalfAngle),
+                       Axis.Y * SinF(HalfAngle),
+                       Axis.Z * SinF(HalfAngle));
+
+    return Result;
+}
+
+internal inline quat
 operator-(quat Q)
 {
     quat Result = quat { -Q.W, -Q.X, -Q.Y, -Q.Z };
@@ -359,33 +465,6 @@ internal inline quat
 operator+(quat A, quat B)
 {
     quat Result = quat { A.W + B.W, A.X + B.X, A.Y + B.Y, A.Z + B.Z };
-    return Result;
-}
-
-internal inline quat
-QuatGetNeutral()
-{
-    quat Result {};
-
-    Result.W = 1.0f;
-
-    return Result;
-}
-
-internal inline quat
-QuatGetRotationAroundAxis(vec3 Axis, f32 AngleRads)
-{
-    quat Result {};
-
-    f32 HalfAngle = AngleRads * 0.5f;
-
-    Axis = VecNormalize(Axis);
-    
-    Result.W = CosF(HalfAngle);
-    Result.X = Axis.X * SinF(HalfAngle);
-    Result.Y = Axis.Y * SinF(HalfAngle);
-    Result.Z = Axis.Z * SinF(HalfAngle);
-
     return Result;
 }
 
@@ -439,29 +518,62 @@ struct mat3
 };
 
 internal inline mat3
-Mat3Identity()
+Mat3()
+{
+    mat3 Result = {};
+    return Result;
+};
+
+internal inline mat3
+Mat3(f32 Diagonal)
 {
     mat3 Result = {};
 
-    Result.E[0][0] = 1.0f;
-    Result.E[1][1] = 1.0f;
-    Result.E[2][2] = 1.0f;
+    Result.E[0][0] = Diagonal;
+    Result.E[1][1] = Diagonal;
+    Result.E[2][2] = Diagonal;
 
     return Result;
 }
 
 internal inline mat3
-Mat3Transpose(mat3 M)
+Mat3(vec3 A, vec3 B, vec3 C)
 {
     mat3 Result = {};
 
-    for (u32 Column = 0; Column < 3; ++Column)
-    {
-        for (u32 Row = 0; Row < 3; ++Row)
-        {
-            Result.E[Column][Row] = M.E[Row][Column];
-        }
-    }
+    Result.E[0][0] = A.X;
+    Result.E[0][1] = A.Y;
+    Result.E[0][2] = A.Z;
+
+    Result.E[1][0] = B.X;
+    Result.E[1][1] = B.Y;
+    Result.E[1][2] = B.Z;
+
+    Result.E[2][0] = C.X;
+    Result.E[2][1] = C.Y;
+    Result.E[2][2] = C.Z;
+
+    return Result;
+}
+
+internal inline mat3
+Mat3(vec3 *Cols)
+{
+    Assert(Cols);
+
+    mat3 Result = {};
+
+    Result.E[0][0] = Cols[0].X;
+    Result.E[0][1] = Cols[0].Y;
+    Result.E[0][2] = Cols[0].Z;
+
+    Result.E[1][0] = Cols[1].X;
+    Result.E[1][1] = Cols[1].Y;
+    Result.E[1][2] = Cols[1].Z;
+
+    Result.E[2][0] = Cols[2].X;
+    Result.E[2][1] = Cols[2].Y;
+    Result.E[2][2] = Cols[2].Z;
 
     return Result;
 }
@@ -496,73 +608,6 @@ operator*(mat3 M, vec3 V)
     return Result;
 }
 
-internal inline mat3
-Mat3FromCols(vec3 A, vec3 B, vec3 C)
-{
-    mat3 Result = {};
-
-    Result.E[0][0] = A.X;
-    Result.E[0][1] = A.Y;
-    Result.E[0][2] = A.Z;
-
-    Result.E[1][0] = B.X;
-    Result.E[1][1] = B.Y;
-    Result.E[1][2] = B.Z;
-
-    Result.E[2][0] = C.X;
-    Result.E[2][1] = C.Y;
-    Result.E[2][2] = C.Z;
-
-    return Result;
-}
-
-internal inline mat3
-Mat3FromCols(vec3 *Cols)
-{
-    Assert(Cols);
-
-    mat3 Result = {};
-
-    Result.E[0][0] = Cols[0].X;
-    Result.E[0][1] = Cols[0].Y;
-    Result.E[0][2] = Cols[0].Z;
-
-    Result.E[1][0] = Cols[1].X;
-    Result.E[1][1] = Cols[1].Y;
-    Result.E[1][2] = Cols[1].Z;
-
-    Result.E[2][0] = Cols[2].X;
-    Result.E[2][1] = Cols[2].Y;
-    Result.E[2][2] = Cols[2].Z;
-
-    return Result;
-}
-
-internal inline mat3
-Mat3GetRotationAroundAxis(vec3 Axis, f32 Angle)
-{
-    f32 C = CosF(Angle);
-    f32 S = SinF(Angle);
-    
-    vec3 Temp = (1.0f - C) * Axis;
-
-    mat3 Result;
-
-    Result.E[0][0] = C + Temp.E[0] * Axis.E[0];
-    Result.E[0][1] = Temp.E[0] * Axis.E[1] + S * Axis.E[2];
-    Result.E[0][2] = Temp.E[0] * Axis.E[2] - S * Axis.E[1];
-
-    Result.E[1][0] = Temp.E[1] * Axis.E[0] - S * Axis.E[2];
-    Result.E[1][1] = C + Temp.E[1] * Axis.E[1];
-    Result.E[1][2] = Temp.E[1] * Axis.E[2] + S * Axis.E[0];
-
-    Result.E[2][0] = Temp.E[2] * Axis.E[0] + S * Axis.E[1];
-    Result.E[2][1] = Temp.E[2] * Axis.E[1] - S * Axis.E[0];
-    Result.E[2][2] = C + Temp.E[2] * Axis.E[2];
-
-    return Result;
-}
-
 internal inline vec3
 Mat3GetCol(mat3 M, u32 ColumnIndex)
 {
@@ -592,6 +637,47 @@ Mat3GetCols(mat3 M, vec3 *Out_Cols)
     }
 }
 
+internal inline mat3
+Mat3Transpose(mat3 M)
+{
+    mat3 Result = {};
+
+    for (u32 Column = 0; Column < 3; ++Column)
+    {
+        for (u32 Row = 0; Row < 3; ++Row)
+        {
+            Result.E[Column][Row] = M.E[Row][Column];
+        }
+    }
+
+    return Result;
+}
+
+internal inline mat3
+Mat3GetRotationAroundAxis(vec3 Axis, f32 Angle)
+{
+    f32 C = CosF(Angle);
+    f32 S = SinF(Angle);
+    
+    vec3 Temp = (1.0f - C) * Axis;
+
+    mat3 Result;
+
+    Result.E[0][0] = C + Temp.E[0] * Axis.E[0];
+    Result.E[0][1] = Temp.E[0] * Axis.E[1] + S * Axis.E[2];
+    Result.E[0][2] = Temp.E[0] * Axis.E[2] - S * Axis.E[1];
+
+    Result.E[1][0] = Temp.E[1] * Axis.E[0] - S * Axis.E[2];
+    Result.E[1][1] = C + Temp.E[1] * Axis.E[1];
+    Result.E[1][2] = Temp.E[1] * Axis.E[2] + S * Axis.E[0];
+
+    Result.E[2][0] = Temp.E[2] * Axis.E[0] + S * Axis.E[1];
+    Result.E[2][1] = Temp.E[2] * Axis.E[1] - S * Axis.E[0];
+    Result.E[2][2] = C + Temp.E[2] * Axis.E[2];
+
+    return Result;
+}
+
 // -------------------------------------------------------------------------------
 // MATRIX 4 ----------------------------------------------------------------------
 // -------------------------------------------------------------------------------
@@ -602,14 +688,99 @@ struct mat4
 };
 
 internal inline mat4
-Mat4Identity()
+Mat4()
+{
+    mat4 Result = {};
+    return Result;
+};
+
+internal inline mat4
+Mat4(f32 Diagonal)
 {
     mat4 Result = {};
 
-    Result.E[0][0] = 1.0f;
-    Result.E[1][1] = 1.0f;
-    Result.E[2][2] = 1.0f;
-    Result.E[3][3] = 1.0f;
+    Result.E[0][0] = Diagonal;
+    Result.E[1][1] = Diagonal;
+    Result.E[2][2] = Diagonal;
+    Result.E[3][3] = Diagonal;
+
+    return Result;
+}
+
+internal inline mat4
+Mat4(vec4 A, vec4 B, vec4 C, vec4 D)
+{
+    mat4 Result = {};
+
+    Result.E[0][0] = A.X;
+    Result.E[0][1] = A.Y;
+    Result.E[0][2] = A.Z;
+    Result.E[0][3] = A.W;
+
+    Result.E[1][0] = B.X;
+    Result.E[1][1] = B.Y;
+    Result.E[1][2] = B.Z;
+    Result.E[1][3] = B.W;
+
+    Result.E[2][0] = C.X;
+    Result.E[2][1] = C.Y;
+    Result.E[2][2] = C.Z;
+    Result.E[2][3] = C.W;
+
+    Result.E[3][0] = D.X;
+    Result.E[3][1] = D.Y;
+    Result.E[3][2] = D.Z;
+    Result.E[3][3] = D.W;
+
+    return Result;
+}
+
+internal inline mat4
+Mat4(vec4 *Cols)
+{
+    Assert(Cols);
+
+    mat4 Result = {};
+
+    Result.E[0][0] = Cols[0].X;
+    Result.E[0][1] = Cols[0].Y;
+    Result.E[0][2] = Cols[0].Z;
+    Result.E[0][3] = Cols[0].W;
+
+    Result.E[1][0] = Cols[1].X;
+    Result.E[1][1] = Cols[1].Y;
+    Result.E[1][2] = Cols[1].Z;
+    Result.E[1][3] = Cols[1].W;
+
+    Result.E[2][0] = Cols[2].X;
+    Result.E[2][1] = Cols[2].Y;
+    Result.E[2][2] = Cols[2].Z;
+    Result.E[2][3] = Cols[2].W;
+
+    Result.E[3][0] = Cols[3].X;
+    Result.E[3][1] = Cols[3].Y;
+    Result.E[3][2] = Cols[3].Z;
+    Result.E[3][3] = Cols[3].W;
+
+    return Result;
+}
+
+internal inline mat4
+Mat4(mat3 M)
+{
+    mat4 Result = Mat4(1.0f); // TODO: Is (3, 3) = 1 always when casting mat3 to mat4?
+
+    Result.E[0][0] = M.E[0][0];
+    Result.E[0][1] = M.E[0][1];
+    Result.E[0][2] = M.E[0][2];
+    
+    Result.E[1][0] = M.E[1][0];
+    Result.E[1][1] = M.E[1][1];
+    Result.E[1][2] = M.E[1][2];
+
+    Result.E[2][0] = M.E[2][0];
+    Result.E[2][1] = M.E[2][1];
+    Result.E[2][2] = M.E[2][2];
 
     return Result;
 }
@@ -646,28 +817,6 @@ operator*(mat4 M, vec4 V)
     return Result;
 }
 
-internal inline mat4
-Mat4GetFromMat3(mat3 M)
-{
-    mat4 Result {};
-
-    Result.E[0][0] = M.E[0][0];
-    Result.E[0][1] = M.E[0][1];
-    Result.E[0][2] = M.E[0][2];
-    
-    Result.E[1][0] = M.E[1][0];
-    Result.E[1][1] = M.E[1][1];
-    Result.E[1][2] = M.E[1][2];
-
-    Result.E[2][0] = M.E[2][0];
-    Result.E[2][1] = M.E[2][1];
-    Result.E[2][2] = M.E[2][2];
-
-    Result.E[3][3] = 1.0f; // TODO: Is this always the case when casting mat3 to mat4?
-
-    return Result;
-}
-
 // ---------------------------------------------------------------------------------
 // TRANSFORMS ----------------------------------------------------------------------
 // ---------------------------------------------------------------------------------
@@ -682,7 +831,7 @@ Mat4GetView(vec3 EyePosition, vec3 TargetPoint, vec3 WorldUp)
     vec3 Right = VecNormalize(VecCross(Front, VecNormalize(WorldUp)));
     vec3 Up = VecCross(Right, Front);
 
-    mat4 Result = Mat4Identity();
+    mat4 Result = Mat4(1.0f);
     Result.E[0][0] =  Right.X;
     Result.E[0][1] =  Up.X;
     Result.E[0][2] = -Front.X;
@@ -720,7 +869,7 @@ Mat4GetPerspecitveProjection(f32 FovY_Degrees, f32 AspectRatio, f32 Near, f32 Fa
 internal inline mat4
 Mat4GetTranslation(vec3 Translation)
 {
-    mat4 Result = Mat4Identity();
+    mat4 Result = Mat4(1.0f);
     
     Result.E[3][0] = Translation.X;
     Result.E[3][1] = Translation.Y;
@@ -732,7 +881,7 @@ Mat4GetTranslation(vec3 Translation)
 internal inline mat3
 Mat3GetRotationFromQuat(quat Q)
 {
-    mat3 Result = Mat3Identity();
+    mat3 Result = Mat3(1.0f);
 
     f32 QXX = Q.X * Q.X;
     f32 QYY = Q.Y * Q.Y;
@@ -762,14 +911,14 @@ Mat3GetRotationFromQuat(quat Q)
 internal inline mat4
 Mat4GetRotationFromQuat(quat Q)
 {
-    mat4 Result = Mat4GetFromMat3(Mat3GetRotationFromQuat(Q));
+    mat4 Result = Mat4(Mat3GetRotationFromQuat(Q));
     return Result;
 }
 
 internal inline mat4
 Mat4GetScale(vec3 Scale)
 {
-    mat4 Result = Mat4Identity();
+    mat4 Result = Mat4(1.0f);
 
     Result.E[0][0] = Scale.X;
     Result.E[1][1] = Scale.Y;
@@ -789,6 +938,5 @@ Mat4GetFullTransform(vec3 Position, quat Rotation, vec3 Scale)
     mat4 Result = TranslationTransform * RotationTransform * ScaleTransform;
     return Result;
 }
-
 
 #endif

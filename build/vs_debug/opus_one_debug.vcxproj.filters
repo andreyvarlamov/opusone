@@ -29,6 +29,9 @@
     <ClCompile Include="..\..\source\sdl_opusone.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\opusone_debug_draw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\opusone.h">
@@ -64,6 +67,12 @@
       <Filter>Shader Files</Filter>
     </None>
     <None Include="..\..\resources\shaders\StaticMesh.vs">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="..\..\resources\shaders\DebugDraw.fs">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="..\..\resources\shaders\DebugDraw.vs">
       <Filter>Shader Files</Filter>
     </None>
   </ItemGroup>

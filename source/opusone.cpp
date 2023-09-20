@@ -10,6 +10,8 @@
 #include <cstdio>
 #include <glad/glad.h>
 
+#include "opusone_debug_draw.cpp"
+
 void
 ComputeTransformsForAnimation(animation_state *AnimationState, mat4 *BoneTransforms, u32 BoneTransformCount)
 {
@@ -37,7 +39,7 @@ ComputeTransformsForAnimation(animation_state *AnimationState, mat4 *BoneTransfo
         Assert(Channel->RotationKeyCount != 0);
         Assert(Channel->ScaleKeyCount != 0);
 
-        vec3 Position {};
+        vec3 Position = {};
 
         if (Channel->PositionKeyCount == 1)
         {
@@ -81,7 +83,7 @@ ComputeTransformsForAnimation(animation_state *AnimationState, mat4 *BoneTransfo
 #endif
         }
                             
-        quat Rotation = QuatGetNeutral();
+        quat Rotation = Quat();
 
         if (Channel->RotationKeyCount == 1)
         {
@@ -123,7 +125,7 @@ ComputeTransformsForAnimation(animation_state *AnimationState, mat4 *BoneTransfo
 #endif
         }
                             
-        vec3 Scale { 1.0f, 1.0f, 1.0f };
+        vec3 Scale = Vec3(1.0f, 1.0f, 1.0f);
 
         if (Channel->ScaleKeyCount == 1)
         {
@@ -234,9 +236,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
              ++BlueprintIndex)
         {
             world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + BlueprintIndex;
-
-            world_object_blueprint ZeroBlueprint {};
-            *Blueprint = ZeroBlueprint;
+            *Blueprint = {};
             
             Blueprint->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, ModelPaths[BlueprintIndex-1].D);
         }
@@ -437,22 +437,21 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glEnable(GL_BLEND);
+        glEnable(GL_LINE_SMOOTH);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         //
         // NOTE: Add instances of world object blueprints
         //
         world_object_instance Instances[] = {
-            world_object_instance { 1, vec3 { 0.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
-            world_object_instance { 1, vec3 { 20.0f, 0.0f, 0.0f }, QuatGetRotationAroundAxis(vec3 { 0.0f, 1.0f, 1.0f }, ToRadiansF(45.0f)), vec3 { 0.5f, 1.0f, 2.0f }, 0 },
-            world_object_instance { 1, vec3 { 0.0f, 0.0f, -30.0f }, QuatGetRotationAroundAxis(vec3 { 1.0f, 1.0f, 1.0f }, ToRadiansF(160.0f)), vec3 { 1.0f, 1.0f, 5.0f }, 0 },
-
-            world_object_instance { 2, vec3 { 0.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
-            world_object_instance { 2, vec3 { -1.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
-            world_object_instance { 2, vec3 { 1.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
-            world_object_instance { 2, vec3 { 2.0f, 0.0f, 0.0f }, QuatGetNeutral(), vec3 { 1.0f, 1.0f, 1.0f }, 0 },
-
-            world_object_instance { 3, vec3 { 0.0f, 0.0f, -3.0f }, QuatGetNeutral(), vec3 { 0.3f, 0.3f, 0.3f }, 0 },
+            world_object_instance { 1, Vec3(0.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
+            world_object_instance { 1, Vec3(20.0f,0.0f, 0.0f), Quat(Vec3(0.0f, 1.0f, 1.0f), ToRadiansF(45.0f)), Vec3(0.5f, 1.0f, 2.0f), 0 },
+            world_object_instance { 1, Vec3(0.0f,0.0f,-30.0f), Quat(Vec3(1.0f, 1.0f,1.0f), ToRadiansF(160.0f)), Vec3(1.0f, 1.0f, 5.0f), 0 },
+            world_object_instance { 2, Vec3(0.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
+            world_object_instance { 2, Vec3(-1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
+            world_object_instance { 2, Vec3(1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
+            world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
+            world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f), 0 },
         };
 
         GameState->WorldObjectInstanceCount = ArrayCount(Instances) + 1;
@@ -557,82 +556,31 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 
+    vec3 BoxPosition = Vec3(-5.0f, 1.0f, 0.0f);
+    vec3 BoxExtents = Vec3(1.0f, 1.0f, 1.0f);
+    
+    for (u32 BoxIndex = 1;
+         BoxIndex <= 5;
+         ++BoxIndex)
     {
-        vec3 BoxPosition = { -5.0f, 1.0f, 0.0f };
-        vec3 BoxExtents = { 1.0f, 1.0f, 1.0f };
-
-        for (u32 BoxIndex = 1;
-             BoxIndex <= 5;
-             ++BoxIndex)
-        {
-            vec3 BoxVertices[] = {
-                BoxPosition + vec3 { -BoxExtents.X,  BoxExtents.Y,  BoxExtents.Z },
-                BoxPosition + vec3 { -BoxExtents.X, -BoxExtents.Y,  BoxExtents.Z },
-                BoxPosition + vec3 {  BoxExtents.X, -BoxExtents.Y,  BoxExtents.Z },
-                BoxPosition + vec3 {  BoxExtents.X,  BoxExtents.Y,  BoxExtents.Z },
-                BoxPosition + vec3 {  BoxExtents.X,  BoxExtents.Y, -BoxExtents.Z },
-                BoxPosition + vec3 {  BoxExtents.X, -BoxExtents.Y, -BoxExtents.Z },
-                BoxPosition + vec3 { -BoxExtents.X, -BoxExtents.Y, -BoxExtents.Z },
-                BoxPosition + vec3 { -BoxExtents.X,  BoxExtents.Y, -BoxExtents.Z }
-            };
-            u32 VertexCount = ArrayCount(BoxVertices);
-
-            vec3 BoxNormals[] = {
-                VecNormalize(vec3 { -1.0f,  1.0f,  1.0f }),
-                VecNormalize(vec3 { -1.0f, -1.0f,  1.0f }),
-                VecNormalize(vec3 {  1.0f, -1.0f,  1.0f }),
-                VecNormalize(vec3 {  1.0f,  1.0f,  1.0f }),
-                VecNormalize(vec3 {  1.0f,  1.0f, -1.0f }),
-                VecNormalize(vec3 {  1.0f, -1.0f, -1.0f }),
-                VecNormalize(vec3 { -1.0f, -1.0f, -1.0f }),
-                VecNormalize(vec3 { -1.0f,  1.0f, -1.0f })
-            };
-
-            vec4 BoxColors[8] = {};
-            for (u32 I = 0; I < 8; ++I)
-            {
-                BoxColors[I] = vec4 { 1.0f, 1.0f, 0.0f, 1.0f };
-            }
-
-#if 0
-            i32 BoxIndices[] = {
-                0, 1, 3,  3, 1, 2, // front
-                4, 5, 7,  7, 5, 6, // back
-                7, 0, 4,  4, 0, 3, // top
-                1, 6, 2,  2, 6, 5, // bottom
-                7, 6, 0,  0, 6, 1, // left
-                3, 2, 4,  4, 2, 5  // right
-            };
-#else
-            i32 BoxIndices[] = {
-                0, 1,  1, 2,  2, 3,  3, 0,
-                4, 5,  5, 6,  6, 7,  7, 4,
-                0, 7,  1, 6,  2, 5,  3, 4
-            };
-#endif
-            u32 IndexCount = ArrayCount(BoxIndices);
-
-            render_unit *RenderUnit = &GameState->DebugDrawRenderUnit;
-            render_marker *Marker = RenderUnit->Markers + (RenderUnit->MarkerCount++);
-            *Marker = {};
-            Marker->StateT = RENDER_STATE_DEBUG;
-            Marker->BaseVertexIndex = RenderUnit->VertexCount;
-            Marker->StartingIndex = RenderUnit->IndexCount;
-            Marker->IndexCount = IndexCount;
-            Marker->StateD.Debug.IsWireframe = true;
-
-            void *AttribData[16] = {};
-            u32 AttribCount = 0;
-            AttribData[AttribCount++] = BoxVertices;
-            AttribData[AttribCount++] = BoxNormals;
-            AttribData[AttribCount++] = BoxColors;
-            Assert(AttribCount <= ArrayCount(AttribData));
-
-            SubVertexDataForRenderUnit(RenderUnit, AttribData, AttribCount, BoxIndices, VertexCount, IndexCount);
-
-            BoxPosition.X += 2.5f;
-        }
+        DD_PushAABox(&GameState->DebugDrawRenderUnit, BoxPosition, BoxExtents, Vec3(1.0f, 1.0f, 0.0f));
+        BoxPosition.X += 2.5f;
     }
+
+    DD_PushVector(&GameState->DebugDrawRenderUnit,
+                  Vec3(0.0f, 0.0f, 0.0f), Vec3(5.0f, 0.0f, 0.0f),
+                  Vec3(0.8f, 0.8f, 0.8f), Vec3(1.0f, 0.0f, 0.0f), 3.0f);
+    DD_PushVector(&GameState->DebugDrawRenderUnit,
+                  Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.0f, 0.0f),
+                  Vec3(0.8f, 0.8f, 0.8f), Vec3(0.0f, 1.0f, 0.0f), 3.0f);
+    DD_PushVector(&GameState->DebugDrawRenderUnit,
+                  Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 5.0f),
+                  Vec3(0.8f, 0.8f, 0.8f), Vec3(0.0f, 0.0f, 1.0f), 3.0f);
+
+    DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (5.0f, 0.0f, 5.0f), Vec3(1.0f, 0.0f, 0.5f), 3.0f);
+    DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (4.0f, 0.0f, 5.0f), Vec3(1.0f, 0.0f, 0.5f), 1.0f);
+    DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (6.0f, 0.0f, 5.0f), Vec3(1.0f, 0.0f, 0.5f), 50.0f);
+    DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (5.0f, 0.0f, 4.0f), Vec3(1.0f, 0.0f, 0.5f), 10.0f);
     
     //
     // NOTE: Render
@@ -726,7 +674,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             
                                     if (BoneIndex == 0)
                                     {
-                                        BoneTransform = Mat4Identity();
+                                        BoneTransform = Mat4(1.0f);
                                     }
                                     else
                                     {
@@ -757,20 +705,41 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 {
                     render_state_debug *DebugMarker = &Marker->StateD.Debug;
 
-                    if (DebugMarker->IsWireframe)
+                    if (DebugMarker->LineWidth > 1.0f)
                     {
-                        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                        glLineWidth(DebugMarker->LineWidth);
                     }
+
+                    if (DebugMarker->PointSize > 1.0f)
+                    {
+                        glPointSize(DebugMarker->PointSize);
+                    }
+
+                    if (DebugMarker->IsOverlay)
+                    {
+                        glDisable(GL_DEPTH_TEST);
+                    }
+                   
                     
-                    glDrawElementsBaseVertex(GL_LINES,
+                    glDrawElementsBaseVertex(DebugMarker->IsPointMode ? GL_POINTS : GL_LINES,
                                              Marker->IndexCount,
                                              GL_UNSIGNED_INT,
                                              (void *) (Marker->StartingIndex * sizeof(i32)),
                                              Marker->BaseVertexIndex);
 
-                    if (DebugMarker->IsWireframe)
+                    if (DebugMarker->IsOverlay)
                     {
-                        // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                        glEnable(GL_DEPTH_TEST);
+                    }
+                    
+                    if (DebugMarker->LineWidth > 1.0f)
+                    {
+                        glPointSize(1.0f);
+                    }
+                    
+                    if (DebugMarker->PointSize > 1.0f)
+                    {
+                        glLineWidth(1.0f);
                     }
                     
                 } break; // case RENDER_STATE_DEBUG

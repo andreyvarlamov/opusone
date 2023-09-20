@@ -50,8 +50,10 @@ struct render_state_mesh
 
 struct render_state_debug
 {
-    vec3 Color;
-    b32 IsWireframe;
+    f32 LineWidth;
+    f32 PointSize;
+    b32 IsOverlay;
+    b32 IsPointMode;
 };
 
 struct render_marker

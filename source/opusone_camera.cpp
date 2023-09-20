@@ -54,7 +54,7 @@ GetCameraLocalToWorldTransform(camera *Camera)
     vec3 Front = -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
     vec3 Right = VecCross(Front, vec3 { 0.0f, 1.0f, 0.0f });
     vec3 Up = VecCross(Right, Front);
-    mat3 LocalToWorld = Mat3FromCols(Right, Up, Front);
+    mat3 LocalToWorld = Mat3(Right, Up, Front);
     return LocalToWorld;
 }
 
