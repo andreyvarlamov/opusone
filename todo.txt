@@ -3,12 +3,12 @@ TODO:
     - Handle vertex colors with UVs (+ colors and no UVs and vice versa)
     - Handle normal transforms for skinned meshes
     - Basic lighting
+    - glUniformxx accepts count - can modify the whole array. Do that for bone transforms of skinned meshes
 - More rendering
     - Debug rendering:
         - More bounding shapes: spheres, capsules, wireframe triangles;
         - Make render state management more efficient
     - Consider switching to only one render unit marker type per render unit
-    - Render text and immediate UI for debugging
     - Some kind of screen-space visualization tools. for example plots
     - Instancing
 - Collisions

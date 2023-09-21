@@ -6,462 +6,13 @@
 #include "opusone_camera.h"
 #include "opusone_assimp.h"
 #include "opusone_render.h"
+#include "opusone_animation.h"
+#include "opusone_immtext.h"
 
 #include <cstdio>
 #include <glad/glad.h>
 
 #include "opusone_debug_draw.cpp"
-
-void
-ComputeTransformsForAnimation(animation_state *AnimationState, mat4 *BoneTransforms, u32 BoneTransformCount)
-{
-    imported_armature *Armature = AnimationState->Armature;
-    imported_animation *Animation = AnimationState->Animation;
-    Assert(Armature);
-    Assert(Animation);
-    Assert(Armature->BoneCount == BoneTransformCount);
-    
-    for (u32 BoneIndex = 1;
-         BoneIndex < Armature->BoneCount;
-         ++BoneIndex)
-    {
-        imported_bone *Bone = Armature->Bones + BoneIndex;
-
-        mat4 *Transform = BoneTransforms + BoneIndex;
-                            
-        imported_animation_channel *Channel = Animation->Channels + BoneIndex;
-        Assert(Channel->BoneID == BoneIndex);
-
-        // NOTE: Can't just use a "no change" key, because animation is supposed
-        // to include bone's transform to parent. If there are such cases, will
-        // need to handle them specially
-        Assert(Channel->PositionKeyCount != 0);
-        Assert(Channel->RotationKeyCount != 0);
-        Assert(Channel->ScaleKeyCount != 0);
-
-        vec3 Position = {};
-
-        if (Channel->PositionKeyCount == 1)
-        {
-            Position = Channel->PositionKeys[0];
-        }
-        else if (Channel->PositionKeyCount > 1)
-        {
-            u32 PrevTimeIndex = 0;
-            u32 TimeIndex = 0;
-            for (;
-                 TimeIndex < Channel->PositionKeyCount;
-                 ++TimeIndex)
-            {
-                if (AnimationState->CurrentTicks <= Channel->PositionKeyTimes[TimeIndex])
-                {
-                    break;
-                }
-                PrevTimeIndex = TimeIndex;
-            }
-            Assert(TimeIndex < Channel->PositionKeyCount);
-            // NOTE: If the current animation time is at exactly 0.0, both keys will be the same,
-            // lerp will have no effect. No need to branch, because that should happen only rarely anyways.
-                                
-            vec3 PositionA = Channel->PositionKeys[PrevTimeIndex];
-            vec3 PositionB = Channel->PositionKeys[TimeIndex];
-
-            f32 T = (f32) ((AnimationState->CurrentTicks - Channel->PositionKeyTimes[PrevTimeIndex]) /
-                           (Channel->PositionKeyTimes[TimeIndex] - Channel->PositionKeyTimes[PrevTimeIndex]));
-
-            Position = Vec3Lerp(PositionA, PositionB, T);
-
-#if 0
-            if (ShouldLog && PrevTimeIndex == 0)
-            {
-                printf("[%s]-P-(%d)<%0.3f,%0.3f,%0.3f>:(%d)<%0.3f,%0.3f,%0.3f>[%0.3f]<%0.3f,%0.3f,%0.3f>\n",
-                       Bone->BoneName.D,
-                       PrevTimeIndex, PositionA.X, PositionA.Y, PositionA.Z,
-                       TimeIndex, PositionB.X, PositionB.Y, PositionB.Z,
-                       T, Position.X, Position.Y, Position.Z);
-            }
-#endif
-        }
-                            
-        quat Rotation = Quat();
-
-        if (Channel->RotationKeyCount == 1)
-        {
-            Rotation = Channel->RotationKeys[0];
-        }
-        else if (Channel->PositionKeyCount > 1)
-        {
-            u32 PrevTimeIndex = 0;
-            u32 TimeIndex = 0;
-            for (;
-                 TimeIndex < Channel->PositionKeyCount;
-                 ++TimeIndex)
-            {
-                if (AnimationState->CurrentTicks <= Channel->RotationKeyTimes[TimeIndex])
-                {
-                    break;
-                }
-                PrevTimeIndex = TimeIndex;
-            }
-            Assert(TimeIndex < Channel->RotationKeyCount);
-
-            quat RotationA = Channel->RotationKeys[PrevTimeIndex];
-            quat RotationB = Channel->RotationKeys[TimeIndex];
-
-            f32 T = (f32) ((AnimationState->CurrentTicks - Channel->RotationKeyTimes[PrevTimeIndex]) /
-                           (Channel->RotationKeyTimes[TimeIndex] - Channel->RotationKeyTimes[PrevTimeIndex]));
-
-            Rotation = QuatSphericalLerp(RotationA, RotationB, T);
-
-#if 0
-            if (ShouldLog && PrevTimeIndex == 0)
-            {
-                printf("[%s]-R-(%d)<%0.3f,%0.3f,%0.3f,%0.3f>:(%d)<%0.3f,%0.3f,%0.3f,%0.3f>[%0.3f]<%0.3f,%0.3f,%0.3f,%0.3f>\n",
-                       Bone->BoneName.D,
-                       PrevTimeIndex, RotationA.W, RotationA.X, RotationA.Y, RotationA.Z,
-                       TimeIndex, RotationB.W, RotationB.X, RotationB.Y, RotationB.Z,
-                       T, Rotation.W, Rotation.X, Rotation.Y, Rotation.Z);
-            }
-#endif
-        }
-                            
-        vec3 Scale = Vec3(1.0f, 1.0f, 1.0f);
-
-        if (Channel->ScaleKeyCount == 1)
-        {
-            Scale = Channel->ScaleKeys[0];
-        }
-        else if (Channel->ScaleKeyCount > 1)
-        {
-            u32 PrevTimeIndex = 0;
-            u32 TimeIndex = 0;
-            for (;
-                 TimeIndex < Channel->ScaleKeyCount;
-                 ++TimeIndex)
-            {
-                if (AnimationState->CurrentTicks <= Channel->ScaleKeyTimes[TimeIndex])
-                {
-                    break;
-                }
-                PrevTimeIndex = TimeIndex;
-            }
-            Assert(TimeIndex < Channel->RotationKeyCount);
-
-            vec3 ScaleA = Channel->ScaleKeys[PrevTimeIndex];
-            vec3 ScaleB = Channel->ScaleKeys[TimeIndex];
-
-            f32 T = (f32) ((AnimationState->CurrentTicks - Channel->ScaleKeyTimes[PrevTimeIndex]) /
-                           (Channel->ScaleKeyTimes[TimeIndex] - Channel->ScaleKeyTimes[PrevTimeIndex]));
-
-            Scale = Vec3Lerp(ScaleA, ScaleB, T);
-
-#if 0
-            if (ShouldLog && PrevTimeIndex == 0)
-            {
-                printf("[%s]-S-(%d)<%0.3f,%0.3f,%0.3f>:(%d)<%0.3f,%0.3f,%0.3f>[%0.3f]<%0.3f,%0.3f,%0.3f>\n",
-                       Bone->BoneName.D,
-                       PrevTimeIndex, ScaleA.X, ScaleA.Y, ScaleA.Z,
-                       TimeIndex, ScaleB.X, ScaleB.Y, ScaleB.Z,
-                       T, Scale.X, Scale.Y, Scale.Z);
-            }
-#endif
-        }
-
-        mat4 AnimationTransform = Mat4GetFullTransform(Position, Rotation, Scale);
-
-        if (Bone->ParentID == 0)
-        {
-            *Transform = AnimationTransform;
-        }
-        else
-        {
-            Assert (Bone->ParentID < BoneIndex);
-            *Transform = BoneTransforms[Bone->ParentID] * AnimationTransform;
-        }
-    }
-}
-
-b32
-ValidateAllGlyphImagesFreed(platform_image *GlyphImages, u32 GlyphCount)
-{
-    for (u32 GlyphIndex = 0;
-         GlyphIndex < GlyphCount;
-         ++GlyphIndex)
-    {
-        if (GlyphImages[GlyphIndex].ImageData)
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-font_info *
-ImmText_LoadFont(memory_arena *Arena, const char *Path, u32 PointSize)
-{
-    //
-    // NOTE: Allocate memory for the font info and glyph infos
-    //
-    font_info *FontInfo = MemoryArena_PushStruct(Arena, font_info);
-    *FontInfo = {};
-
-    FontInfo->GlyphCount = 128;
-    FontInfo->GlyphInfos = MemoryArena_PushArray(Arena, FontInfo->GlyphCount, glyph_info);
-    for (u32 GlyphIndex = 0;
-         GlyphIndex < FontInfo->GlyphCount;
-         ++GlyphIndex)
-    {
-        FontInfo->GlyphInfos[GlyphIndex] = {};
-    }
-
-    //
-    // NOTE: Allocate temp memory for the pointers to rendered glyphs
-    //
-    MemoryArena_Freeze(Arena);
-    platform_image *GlyphImages = MemoryArena_PushArray(Arena, FontInfo->GlyphCount, platform_image);
-
-    //
-    // NOTE: Use platform layer to load font
-    //
-    platform_font Font = Platform_LoadFont(Path, PointSize);
-    FontInfo->PointSize = Font.PointSize;
-    FontInfo->Height = Font.Height;
-    u32 BytesPerPixel = 4;
-
-    //
-    // NOTE: Render each glyph into an image, get glyph metrics and get max glyph
-    // width to allocate byte for the     
-    //
-    u32 MaxGlyphWidth = 0;
-    for (u8 GlyphChar = 32;
-         GlyphChar < FontInfo->GlyphCount;
-         ++GlyphChar)
-    {
-        glyph_info *GlyphInfo = FontInfo->GlyphInfos + GlyphChar;
-
-        Platform_GetGlyphMetrics(&Font, (char) GlyphChar,
-                                 &GlyphInfo->MinX, &GlyphInfo->MaxX, &GlyphInfo->MinY, &GlyphInfo->MaxY, &GlyphInfo->Advance);
-
-        platform_image GlyphImage = Platform_RenderGlyph(&Font, (char) GlyphChar);
-        if (GlyphImage.Width > MaxGlyphWidth)
-        {
-            MaxGlyphWidth = GlyphImage.Width;
-        }
-        Assert(GlyphImage.Height <= FontInfo->Height);
-        Assert(GlyphImage.BytesPerPixel == BytesPerPixel);
-
-        GlyphImages[GlyphChar] = GlyphImage;
-    }
-
-    //
-    // NOTE: Allocate memory for the font atlas
-    //
-    
-    // NOTE: 12x8 = 96 -> for the 95 visible glyphs
-    u32 AtlasColumns = 12;
-    u32 AtlasRows = 8;
-    u32 AtlasPxWidth = AtlasColumns * MaxGlyphWidth;
-    u32 AtlasPxHeight = AtlasRows * Font.Height;
-    u32 AtlasPitch = BytesPerPixel * AtlasPxWidth;
-    u8 *AtlasBytes = MemoryArena_PushArray(Arena, AtlasPitch * AtlasPxHeight, u8);
-    
-    //
-    // NOTE: Blit each glyph surface to the atlas surface
-    //
-    u32 CurrentGlyphIndex = 0;
-    for (u8 GlyphChar = 32;
-         GlyphChar < FontInfo->GlyphCount;
-         ++GlyphChar)
-    {
-        platform_image *GlyphImage = GlyphImages + GlyphChar;
-        Assert(GlyphImage->Width > 0);
-        Assert(GlyphImage->Width <= MaxGlyphWidth);
-        Assert(GlyphImage->Height > 0);
-        Assert(GlyphImage->Height <= FontInfo->Height);
-        Assert(GlyphImage->BytesPerPixel == 4);
-        Assert(GlyphImage->ImageData);
-        
-        glyph_info *GlyphInfo = FontInfo->GlyphInfos + GlyphChar;
-
-        u32 CurrentAtlasCol = CurrentGlyphIndex % AtlasColumns;
-        u32 CurrentAtlasRow = CurrentGlyphIndex / AtlasColumns;
-        u32 AtlasPxX = CurrentAtlasCol * MaxGlyphWidth;
-        u32 AtlasPxY = CurrentAtlasRow * FontInfo->Height;
-        size_t AtlasByteOffset = (AtlasPxY * AtlasPxWidth + AtlasPxX) * BytesPerPixel;
-
-        u8 *Dest = AtlasBytes + AtlasByteOffset;
-        u8 *Source = GlyphImage->ImageData;
-        for (u32 GlyphPxY = 0;
-             GlyphPxY < GlyphImage->Height;
-             ++GlyphPxY)
-        {
-            u8 *DestByte = (u8 *) Dest;
-            u8 *SourceByte = (u8 *) Source;
-            
-            for (u32 GlyphPxX = 0;
-                 GlyphPxX < GlyphImage->Width;
-                 ++GlyphPxX)
-            {
-                for (u32 PixelByte = 0;
-                     PixelByte < BytesPerPixel;
-                     ++PixelByte)
-                {
-                    *DestByte++ = *SourceByte++;
-                }
-            }
-
-            Dest += AtlasPitch;
-            Source += GlyphImage->Pitch;
-        }
-
-        //
-        // NOTE:Use the atlas position and width/height to calculate UVs for each glyph
-        //
-        // NOTE: It seems that SDL_ttf embeds MinX into the rendered glyph, but also it's ignored if it's less than 0
-        // Need to shift where to place glyph if MinX is negative, but if not negative, it's already included
-        // in the rendered glyph. This works but seems very finicky
-        // TODO: Just use freetype directly or stb
-        u32 GlyphTexWidth = ((GlyphInfo->MinX >= 0) ? (GlyphInfo->MaxX) : (GlyphInfo->MaxX - GlyphInfo->MinX));
-        u32 GlyphTexHeight = Font.Height;
-        
-        f32 OneOverAtlasPxWidth = 1.0f / (f32) AtlasPxWidth;
-        f32 OneOverAtlasPxHeight = 1.0f / (f32) AtlasPxHeight;
-        f32 UVLeft = (f32) AtlasPxX * OneOverAtlasPxWidth;
-        f32 UVTop = (f32) AtlasPxY * OneOverAtlasPxHeight;
-        f32 UVRight = (f32) (AtlasPxX + GlyphTexWidth) * OneOverAtlasPxWidth;
-        f32 UVBottom = (f32) (AtlasPxY + GlyphTexHeight) * OneOverAtlasPxHeight;
-        GlyphInfo->GlyphUVs[0] = Vec2(UVLeft, UVTop);
-        GlyphInfo->GlyphUVs[1] = Vec2(UVLeft, UVBottom);
-        GlyphInfo->GlyphUVs[2] = Vec2(UVRight, UVBottom);
-        GlyphInfo->GlyphUVs[3] = Vec2(UVRight, UVTop);
-
-        Platform_FreeImage(GlyphImage);
-
-        CurrentGlyphIndex++;
-    }
-
-    Assert(ValidateAllGlyphImagesFreed(GlyphImages, FontInfo->GlyphCount));
-
-    FontInfo->TextureID = OpenGL_LoadFontAtlasTexture(AtlasBytes, AtlasPxWidth, AtlasPxHeight, AtlasPitch, BytesPerPixel);
-
-    platform_image AtlasPlatformImage = {};
-    AtlasPlatformImage.Width = AtlasPxWidth;
-    AtlasPlatformImage.Height = AtlasPxHeight;
-    AtlasPlatformImage.Pitch = AtlasPitch;
-    AtlasPlatformImage.BytesPerPixel = BytesPerPixel;
-    AtlasPlatformImage.ImageData = AtlasBytes;
-    Platform_SaveImageToDisk("temp/font_atlas_test.bmp", &AtlasPlatformImage,
-                             0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
-
-    MemoryArena_Unfreeze(Arena);
-    Platform_CloseFont(&Font);
-    
-    return FontInfo;
-}
-
-void
-ImmText_DrawString(const char *String, font_info *FontInfo, i32 X, i32 Y, u32 ScreenWidth, u32 ScreenHeight,
-                   vec4 Color, render_unit *RenderUnit, memory_arena *Arena)
-{
-    Assert(FontInfo);
-    Assert(FontInfo->TextureID > 0);
-
-    f32 HalfScreenWidth = (f32) ScreenWidth * 0.5f;
-    f32 HalfScreenHeight = (f32) ScreenHeight * 0.5f;
-
-    i32 CurrentX = X;
-    i32 CurrentY = Y;
-
-    u32 StringCount = 0;
-    while(String[StringCount] != '\0')
-    {
-        StringCount++;
-    }
-
-    MemoryArena_Freeze(Arena);
-    u32 VertexCount = StringCount * 4;
-    u32 IndexCount = StringCount * 6;
-    vec2 *Vertices = MemoryArena_PushArray(Arena, VertexCount, vec2);
-    vec2 *UVs = MemoryArena_PushArray(Arena, VertexCount, vec2);
-    i32 *Indices = MemoryArena_PushArray(Arena, IndexCount, i32);
-
-    u32 CurrentVertexIndex = 0;
-    u32 CurrentUVIndex = 0;
-    u32 CurrentIndexIndex = 0;
-    for (u32 StringIndex = 0;
-         StringIndex < StringCount;
-         ++StringIndex)
-    {
-        u32 Glyph = String[StringIndex];
-
-        if (Glyph == '\n')
-        {
-            CurrentX = X;
-            CurrentY += FontInfo->Height;
-            continue;
-        }
-
-        Assert(Glyph < FontInfo->GlyphCount);
-        glyph_info *GlyphInfo = FontInfo->GlyphInfos + Glyph;
-
-        i32 PxX = ((GlyphInfo->MinX >= 0) ? CurrentX : (CurrentX + GlyphInfo->MinX));
-        i32 PxY = CurrentY;
-        i32 PxWidth = ((GlyphInfo->MinX >= 0) ? GlyphInfo->MaxX : (GlyphInfo->MaxX - GlyphInfo->MinX));
-        i32 PxHeight = FontInfo->Height;
-        f32 NDCLeft = ((f32) PxX / HalfScreenWidth) - 1.0f;
-        f32 NDCTop = -(((f32) PxY / HalfScreenHeight) - 1.0f); // Inverted
-        f32 NDCRight = ((f32) (PxX + PxWidth) / HalfScreenWidth) - 1.0f;
-        f32 NDCBottom = -(((f32) (PxY + PxHeight) / HalfScreenHeight) - 1.0f); // Inverted
-
-        u32 BaseVertexIndex = CurrentVertexIndex;
-        
-        Vertices[CurrentVertexIndex++] = Vec2(NDCLeft, NDCTop);
-        Vertices[CurrentVertexIndex++] = Vec2(NDCLeft, NDCBottom);
-        Vertices[CurrentVertexIndex++] = Vec2(NDCRight, NDCBottom);
-        Vertices[CurrentVertexIndex++] = Vec2(NDCRight, NDCTop);
-
-        for (u32 GlyphUVIndex = 0;
-             GlyphUVIndex < 4;
-             ++GlyphUVIndex)
-        {
-            UVs[CurrentUVIndex++] = GlyphInfo->GlyphUVs[GlyphUVIndex];
-        }
-
-        i32 IndicesToCopy[] = {
-            0, 1, 3,  3, 1, 2
-        };
-
-        for (u32 IndexToCopyIndex = 0;
-             IndexToCopyIndex < 6;
-             ++IndexToCopyIndex)
-        {
-            Indices[CurrentIndexIndex++] = BaseVertexIndex + IndicesToCopy[IndexToCopyIndex];
-        }
-
-        CurrentX += GlyphInfo->Advance;
-    }
-
-    render_marker *Marker = RenderUnit->Markers + (RenderUnit->MarkerCount++);
-    *Marker = {};
-    Marker->StateT = RENDER_STATE_IMM_TEXT;
-    Marker->BaseVertexIndex = RenderUnit->VertexCount;
-    Marker->StartingIndex = RenderUnit->IndexCount;
-    Marker->IndexCount = IndexCount;
-    Marker->StateD.ImmText.AtlasTextureID = FontInfo->TextureID;
-    Marker->StateD.ImmText.Color = Color;
-    Marker->StateD.ImmText.IsOverlay = true;
-
-    void *AttribData[16] = {};
-    u32 AttribCount = 0;
-    AttribData[AttribCount++] = Vertices;
-    AttribData[AttribCount++] = UVs;
-    Assert(AttribCount <= ArrayCount(AttribData));
-
-    SubVertexDataForRenderUnit(RenderUnit, AttribData, AttribCount, Indices, VertexCount, IndexCount);
-
-    MemoryArena_Unfreeze(Arena);
-}
 
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameShouldQuit)
@@ -485,7 +36,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->RenderArena = MemoryArenaNested(&GameState->RootArena, Megabytes(4));
         GameState->AssetArena = MemoryArenaNested(&GameState->RootArena, Megabytes(16));
 
-        GameState->ContrailOne24 = ImmText_LoadFont(&GameState->AssetArena, "resources/fonts/ContrailOne-Regular.ttf", 24);
+        GameState->ContrailOne = ImmText_LoadFont(&GameState->AssetArena, "resources/fonts/ContrailOne-Regular.ttf", 36);
+        GameState->MajorMono = ImmText_LoadFont(&GameState->AssetArena, "resources/fonts/MajorMonoDisplay-Regular.ttf", 72);
 
         u32 StaticShader = OpenGL_BuildShaderProgram("resources/shaders/StaticMesh.vs", "resources/shaders/Basic.fs");
         OpenGL_SetUniformInt(StaticShader, "DiffuseMap", 0, true);
@@ -585,7 +137,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             InitializeRenderUnit(&GameState->StaticRenderUnit, VERT_SPEC_STATIC_MESH,
                                  MaterialsForStaticCount, MeshesForStaticCount,
                                  VerticesForStaticCount, IndicesForStaticCount,
-                                 false, StaticShader, &GameState->RenderArena);
+                                 false, false, StaticShader, &GameState->RenderArena);
         }
 
         if (VerticesForSkinnedCount > 0)
@@ -593,7 +145,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             InitializeRenderUnit(&GameState->SkinnedRenderUnit, VERT_SPEC_SKINNED_MESH,
                                  MaterialsForSkinnedCount, MeshesForSkinnedCount,
                                  VerticesForSkinnedCount, IndicesForSkinnedCount,
-                                 false, SkinnedShader, &GameState->RenderArena);
+                                 false, false, SkinnedShader, &GameState->RenderArena);
         }
 
         // Debug draw render unit
@@ -603,7 +155,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             u32 MaxIndices = 32768;
             
             InitializeRenderUnit(&GameState->DebugDrawRenderUnit, VERT_SPEC_DEBUG_DRAW,
-                                 0, MaxMarkers, MaxVertices, MaxIndices, true, DebugDrawShader,
+                                 0, MaxMarkers, MaxVertices, MaxIndices, true, false, DebugDrawShader,
                                  &GameState->RenderArena);
         }
 
@@ -614,7 +166,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             u32 MaxIndices = 32768;
             
             InitializeRenderUnit(&GameState->ImmTextRenderUnit, VERT_SPEC_IMM_TEXT,
-                                 0, MaxMarkers, MaxVertices, MaxIndices, true, ImmTextShader,
+                                 0, MaxMarkers, MaxVertices, MaxIndices, true, true, ImmTextShader,
                                  &GameState->RenderArena);
         }
 
@@ -734,8 +286,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glEnable(GL_BLEND);
-        glEnable(GL_LINE_SMOOTH);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glEnable(GL_LINE_SMOOTH);
 
         //
         // NOTE: Add instances of world object blueprints
@@ -874,10 +426,24 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (6.0f, 0.0f, 5.0f), Vec3(1.0f, 0.0f, 0.5f), 50.0f);
     DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (5.0f, 0.0f, 4.0f), Vec3(1.0f, 0.0f, 0.5f), 10.0f);
 
-    ImmText_DrawString("Hello, world!", GameState->ContrailOne24,
-                       5, 5, GameInput->OriginalScreenWidth, GameInput->OriginalScreenHeight,
-                       Vec4(1.0f, 1.0f, 1.0f, 1.0f), &GameState->ImmTextRenderUnit, &GameState->RenderArena);
-    
+    ImmText_DrawString("Hello, world!\nblah\n                   oooooooooooooooh\n\nyes",
+                       GameState->ContrailOne,
+                       5, 5, 2560, 1440,
+                       // 5, 5, GameInput->OriginalScreenWidth, GameInput->OriginalScreenHeight,
+                       Vec4(1, 1, 1, 1), true, Vec3(), &GameState->ImmTextRenderUnit, &GameState->RenderArena);
+
+    ImmText_DrawString("STRINGstring",
+                       GameState->MajorMono,
+                       500, 30, 2560, 1440,
+                       // 5, 5, GameInput->OriginalScreenWidth, GameInput->OriginalScreenHeight,
+                       Vec4(1, 0, 0, 0.5f), true, Vec3(1), &GameState->ImmTextRenderUnit, &GameState->RenderArena);
+
+    ImmText_DrawString(SimpleStringF("hello, %0.3f", 0.3123212321f).D,
+                       GameState->ContrailOne,
+                       5, 500, 2560, 1440,
+                       // 5, 5, GameInput->OriginalScreenWidth, GameInput->OriginalScreenHeight,
+                       Vec4(1, 1, 1, 1), true, Vec3(), &GameState->ImmTextRenderUnit, &GameState->RenderArena);
+                       
     //
     // NOTE: Render
     //
@@ -919,6 +485,15 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         glBindVertexArray(RenderUnit->VAO);
 
         u32 TestCounter = 0;
+
+        if (RenderUnit->IsOverlay)
+        {
+            glDisable(GL_DEPTH_TEST);
+        }
+        else if (!RenderUnit->IsOverlay)
+        {
+            glEnable(GL_DEPTH_TEST);
+        }
 
         u32 PreviousMaterialID = 0;
         for (u32 MarkerIndex = 0;
@@ -1020,6 +595,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     {
                         glDisable(GL_DEPTH_TEST);
                     }
+                    else if (!DebugMarker->IsOverlay)
+                    {
+                        glEnable(GL_DEPTH_TEST);
+                    }
                    
                     
                     glDrawElementsBaseVertex(DebugMarker->IsPointMode ? GL_POINTS : GL_LINES,
@@ -1031,6 +610,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     if (DebugMarker->IsOverlay)
                     {
                         glEnable(GL_DEPTH_TEST);
+                    }
+                    else if (!DebugMarker->IsOverlay)
+                    {
+                        glDisable(GL_DEPTH_TEST);
                     }
                     
                     if (DebugMarker->LineWidth > 1.0f)
@@ -1049,25 +632,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 {
                     render_state_imm_text *ImmText = &Marker->StateD.ImmText;
                     
-                    OpenGL_SetUniformVec4F(RenderUnit->ShaderID, "Color", (f32 *) &ImmText->Color, false);
-
                     OpenGL_BindAndActivateTexture(0, ImmText->AtlasTextureID);
-
-                    if (ImmText->IsOverlay)
-                    {
-                        glDisable(GL_DEPTH_TEST);
-                    }
 
                     glDrawElementsBaseVertex(GL_TRIANGLES,
                                              Marker->IndexCount,
                                              GL_UNSIGNED_INT,
                                              (void *) (Marker->StartingIndex * sizeof(i32)),
                                              Marker->BaseVertexIndex);
-
-                    if (ImmText->IsOverlay)
-                    {
-                        glEnable(GL_DEPTH_TEST);
-                    }
                 } break; // case RENDER_STATE_IMM_TEXT
 
                 default:
@@ -1090,3 +661,5 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 #include "opusone_camera.cpp"
 #include "opusone_assimp.cpp"
 #include "opusone_render.cpp"
+#include "opusone_animation.cpp"
+#include "opusone_immtext.cpp"

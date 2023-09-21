@@ -60,9 +60,7 @@ struct render_state_debug
 
 struct render_state_imm_text
 {
-    vec4 Color;
     u32 AtlasTextureID;
-    b32 IsOverlay;
 };
 
 struct render_marker
@@ -96,6 +94,7 @@ struct render_unit
     u32 MaxIndexCount;
 
     b32 IsImmediate;
+    b32 IsOverlay;
 
     u32 MaterialCount;
     u32 MaxMaterialCount;
@@ -163,7 +162,7 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
 void
 InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
                      u32 MaxMaterialCount, u32 MaxMarkerCount, u32 MaxVertexCount, u32 MaxIndexCount,
-                     b32 IsImmediate, u32 ShaderID, memory_arena *Arena);
+                     b32 IsImmediate, b32 IsOverlay, u32 ShaderID, memory_arena *Arena);
 
 void
 BindTexturesForMaterial(render_data_material *Material);

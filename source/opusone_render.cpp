@@ -492,20 +492,24 @@ PrepareVertexDataForRenderUnit(render_unit *RenderUnit)
         {
             size_t AttribStrides[] = {
                 sizeof(vec2),
-                sizeof(vec2)
+                sizeof(vec4),
+                sizeof(vec3)
             };
 
             u8 AttribComponentCounts[] = {
                 2,
-                2,
+                4,
+                3
             };
 
             GLenum GLDataTypes[] = {
                 GL_FLOAT,
                 GL_FLOAT,
+                GL_FLOAT
             };
 
             gl_vert_attrib_type GLAttribTypes[] = {
+                OO_GL_VERT_ATTRIB_FLOAT,
                 OO_GL_VERT_ATTRIB_FLOAT,
                 OO_GL_VERT_ATTRIB_FLOAT,
             };
@@ -611,7 +615,8 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
         {
             size_t AttribStrides[] = {
                 sizeof(vec2),
-                sizeof(vec2)
+                sizeof(vec4),
+                sizeof(vec3)
             };
 
             Assert(AttribCount == ArrayCount(AttribStrides));
@@ -635,7 +640,7 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
 void
 InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
                      u32 MaxMaterialCount, u32 MaxMarkerCount, u32 MaxVertexCount, u32 MaxIndexCount,
-                     b32 IsImmediate, u32 ShaderID, memory_arena *Arena)
+                     b32 IsImmediate, b32 IsOverlay, u32 ShaderID, memory_arena *Arena)
 {
     Assert(RenderUnit);
     Assert(MaxMarkerCount > 0);
@@ -652,6 +657,7 @@ InitializeRenderUnit(render_unit *RenderUnit, vert_spec_type VertSpecType,
     RenderUnit->MaxVertexCount = MaxVertexCount;
     RenderUnit->MaxIndexCount = MaxIndexCount;
     RenderUnit->IsImmediate = IsImmediate;
+    RenderUnit->IsOverlay = IsOverlay;
 
     RenderUnit->Materials = MemoryArena_PushArray(Arena, RenderUnit->MaxMaterialCount, render_data_material);
     RenderUnit->Markers = MemoryArena_PushArray(Arena, RenderUnit->MaxMarkerCount, render_marker);

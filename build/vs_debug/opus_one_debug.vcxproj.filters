@@ -32,6 +32,12 @@
     <ClCompile Include="..\..\source\opusone_debug_draw.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\opusone_animation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\opusone_immtext.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\opusone.h">
@@ -58,6 +64,12 @@
     <ClInclude Include="..\..\source\opusone_render.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\opusone_animation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\opusone_immtext.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\Basic.fs">
@@ -73,6 +85,12 @@
       <Filter>Shader Files</Filter>
     </None>
     <None Include="..\..\resources\shaders\DebugDraw.vs">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="..\..\resources\shaders\ImmText.fs">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="..\..\resources\shaders\ImmText.vs">
       <Filter>Shader Files</Filter>
     </None>
   </ItemGroup>

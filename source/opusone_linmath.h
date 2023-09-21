@@ -166,6 +166,20 @@ Vec3(f32 X, f32 Y, f32 Z)
 }
 
 internal inline vec3
+Vec3(f32 Value)
+{
+    vec3 Result = Vec3(Value, Value, Value);
+    return Result;
+}
+
+internal inline vec3
+Vec3(vec2 V, f32 Z)
+{
+    vec3 Result = Vec3(V.X, V.Y, Z);
+    return Result;
+}
+
+internal inline vec3
 operator+(vec3 V0, vec3 V1)
 {
     return vec3 { V0.X + V1.X, V0.Y + V1.Y, V0.Z + V1.Z };
