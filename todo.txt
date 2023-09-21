@@ -6,7 +6,6 @@ TODO:
 - More rendering
     - Debug rendering:
         - More bounding shapes: spheres, capsules, wireframe triangles;
-        - Coordinate systems
         - Make render state management more efficient
     - Consider switching to only one render unit marker type per render unit
     - Render text and immediate UI for debugging

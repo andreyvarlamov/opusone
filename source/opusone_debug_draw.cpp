@@ -140,3 +140,17 @@ DD_PushPoint(render_unit *RenderUnit, vec3 Point, vec3 Color, f32 PointSize)
 
     SubVertexDataForRenderUnit(RenderUnit, AttribData, AttribCount, Indices, VertexCount, IndexCount);
 }
+
+void
+DD_PushCoordinateAxes(render_unit *RenderUnit, vec3 Position, vec3 X, vec3 Y, vec3 Z, f32 Scale)
+{
+    DD_PushVector(RenderUnit,
+                  Position, Position + X * Scale,
+                  Vec3(0.8f, 0.8f, 0.8f), Vec3(1.0f, 0.0f, 0.0f), 3.0f);
+    DD_PushVector(RenderUnit,
+                  Position, Position + Y * Scale,
+                  Vec3(0.8f, 0.8f, 0.8f), Vec3(0.0f, 1.0f, 0.0f), 3.0f);
+    DD_PushVector(RenderUnit,
+                  Position, Position + Z * Scale,
+                  Vec3(0.8f, 0.8f, 0.8f), Vec3(0.0f, 0.0f, 1.0f), 3.0f);
+}

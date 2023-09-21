@@ -36,3 +36,6 @@
 .vs/
 *.pdb
 x64/
+
+# Misc
+temp/

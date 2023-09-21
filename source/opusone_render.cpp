@@ -4,11 +4,11 @@ internal u32
 CompileShaderFromPath_(const char *Path, u32 ShaderType)
 {
     printf("Compiling shader at %s: ", Path);
-    char *Source = PlatformReadFile(Path);
+    char *Source = Platform_ReadFile(Path);
     u32 Shader = glCreateShader(ShaderType);
     glShaderSource(Shader, 1, &Source, 0);
     glCompileShader(Shader);
-    PlatformFree(Source);
+    Platform_Free(Source);
     Source = 0;
 
     i32 Success = 0;
@@ -101,13 +101,61 @@ OpenGL_SetUniformInt(u32 ShaderID, const char *UniformName, i32 Value, b32 UsePr
 }
 
 inline b32
-OpenGL_SetUniformVec3F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram);
+OpenGL_SetUniformVec3F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram)
+{
+    if (UseProgram)
+    {
+        glUseProgram(ShaderID);
+    }
+    
+    i32 UniformLocation = glGetUniformLocation(ShaderID, UniformName);
+    
+    if (UniformLocation == -1)
+    {
+        return false;
+    }
+
+    glUniform3fv(UniformLocation, 1, Value);
+    return true;
+}
 
 inline b32
-OpenGL_SetUniformVec4F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram);
+OpenGL_SetUniformVec4F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram)
+{
+    if (UseProgram)
+    {
+        glUseProgram(ShaderID);
+    }
+    
+    i32 UniformLocation = glGetUniformLocation(ShaderID, UniformName);
+    
+    if (UniformLocation == -1)
+    {
+        return false;
+    }
+
+    glUniform4fv(UniformLocation, 1, Value);
+    return true;
+}
 
 inline b32
-OpenGL_SetUniformMat3F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram);
+OpenGL_SetUniformMat3F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram)
+{
+    if (UseProgram)
+    {
+        glUseProgram(ShaderID);
+    }
+    
+    i32 UniformLocation = glGetUniformLocation(ShaderID, UniformName);
+
+    if (UniformLocation == -1)
+    {
+        return false;
+    }
+
+    glUniformMatrix3fv(UniformLocation, 1, false, Value);
+    return true;
+}
 
 inline b32
 OpenGL_SetUniformMat4F(u32 ShaderID, const char *UniformName, f32 *Value, b32 UseProgram)
@@ -254,12 +302,35 @@ OpenGL_LoadTexture(u8 *ImageData, u32 Width, u32 Height, u32 Pitch, u32 BytesPer
     u32 TextureID;
 
     glGenTextures(1, &TextureID);
+    Assert(TextureID);
     glBindTexture(GL_TEXTURE_2D, TextureID);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, ImageData);
     glGenerateMipmap(GL_TEXTURE_2D);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return TextureID;
+}
+
+u32
+OpenGL_LoadFontAtlasTexture(u8 *ImageData, u32 Width, u32 Height, u32 Pitch, u32 BytesPerPixel)
+{
+    // TODO: Handle this in the main LoadTexture?
+    Assert(Width * BytesPerPixel == Pitch);
+    Assert(BytesPerPixel == 4);
+    
+    u32 TextureID;
+
+    glGenTextures(1, &TextureID);
+    Assert(TextureID);
+    glBindTexture(GL_TEXTURE_2D, TextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, Width, Height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, ImageData);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -416,6 +487,37 @@ PrepareVertexDataForRenderUnit(render_unit *RenderUnit)
                                            sizeof(i32), GL_DYNAMIC_DRAW,
                                            &RenderUnit->VAO, &RenderUnit->VBO, &RenderUnit->EBO);
         } break;
+
+        case VERT_SPEC_IMM_TEXT:
+        {
+            size_t AttribStrides[] = {
+                sizeof(vec2),
+                sizeof(vec2)
+            };
+
+            u8 AttribComponentCounts[] = {
+                2,
+                2,
+            };
+
+            GLenum GLDataTypes[] = {
+                GL_FLOAT,
+                GL_FLOAT,
+            };
+
+            gl_vert_attrib_type GLAttribTypes[] = {
+                OO_GL_VERT_ATTRIB_FLOAT,
+                OO_GL_VERT_ATTRIB_FLOAT,
+            };
+            
+            u32 AttribCount = ArrayCount(AttribStrides);
+
+            OpenGL_PrepareVertexDataHelper(RenderUnit->MaxVertexCount, RenderUnit->MaxIndexCount,
+                                           AttribStrides, AttribComponentCounts,
+                                           GLDataTypes, GLAttribTypes, AttribCount,
+                                           sizeof(i32), GL_DYNAMIC_DRAW,
+                                           &RenderUnit->VAO, &RenderUnit->VBO, &RenderUnit->EBO);
+        } break;
         
         default:
         {
@@ -492,6 +594,24 @@ SubVertexDataForRenderUnit(render_unit *RenderUnit,
                 sizeof(vec3),
                 sizeof(vec3),
                 sizeof(vec4)
+            };
+
+            Assert(AttribCount == ArrayCount(AttribStrides));
+
+            OpenGL_SubVertexDataHelper(RenderUnit->VertexCount, VertexToSubCount, RenderUnit->MaxVertexCount,
+                                       RenderUnit->IndexCount, IndexToSubCount,
+                                       AttribStrides, AttribCount, sizeof(i32),
+                                       RenderUnit->VBO, RenderUnit->EBO, AttribData, IndicesData);
+
+            RenderUnit->VertexCount += VertexToSubCount;
+            RenderUnit->IndexCount += IndexToSubCount;
+        } break;
+
+        case VERT_SPEC_IMM_TEXT:
+        {
+            size_t AttribStrides[] = {
+                sizeof(vec2),
+                sizeof(vec2)
             };
 
             Assert(AttribCount == ArrayCount(AttribStrides));

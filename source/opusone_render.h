@@ -17,6 +17,7 @@ enum vert_spec_type
     VERT_SPEC_STATIC_MESH,
     VERT_SPEC_SKINNED_MESH,
     VERT_SPEC_DEBUG_DRAW,
+    VERT_SPEC_IMM_TEXT,
     VERT_SPEC_COUNT
 };
 
@@ -28,7 +29,8 @@ struct render_data_material
 enum render_state_type
 {
     RENDER_STATE_MESH,
-    RENDER_STATE_DEBUG
+    RENDER_STATE_DEBUG,
+    RENDER_STATE_IMM_TEXT
 };
 
 // TODO: Should world object instance just point to a mesh?
@@ -56,6 +58,13 @@ struct render_state_debug
     b32 IsPointMode;
 };
 
+struct render_state_imm_text
+{
+    vec4 Color;
+    u32 AtlasTextureID;
+    b32 IsOverlay;
+};
+
 struct render_marker
 {
     u32 BaseVertexIndex; // NOTE: E.g. Index #0 for mesh will point to Index #BaseVertexIndex for render unit
@@ -66,6 +75,7 @@ struct render_marker
     {
         render_state_mesh Mesh;
         render_state_debug Debug;
+        render_state_imm_text ImmText;
     } StateD;
 
     render_state_type StateT;
@@ -136,6 +146,9 @@ OpenGL_SubVertexDataHelper(u32 StartingVertex, u32 VertexCount, u32 MaxVertexCou
 
 u32
 OpenGL_LoadTexture(u8 *ImageData, u32 Width, u32 Height, u32 Pitch, u32 BytesPerPixel);
+
+u32
+OpenGL_LoadFontAtlasTexture(u8 *ImageData, u32 Width, u32 Height, u32 Pitch, u32 BytesPerPixel);
 
 void
 OpenGL_BindAndActivateTexture(u32 TextureUnitIndex, u32 TextureID);

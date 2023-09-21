@@ -80,11 +80,11 @@ SetCameraControlScheme(camera *Camera, camera_control_scheme NewControlScheme)
     NewControlScheme = (camera_control_scheme) (((i32) NewControlScheme % (i32) CAMERA_CONTROL_COUNT));
     if (Camera->ControlScheme != CAMERA_CONTROL_MOUSE && NewControlScheme == CAMERA_CONTROL_MOUSE)
     {
-        PlatformSetRelativeMouse(false);
+        Platform_SetRelativeMouse(false);
     }
     else if (Camera->ControlScheme == CAMERA_CONTROL_MOUSE && NewControlScheme != CAMERA_CONTROL_MOUSE)
     {
-        PlatformSetRelativeMouse(true);
+        Platform_SetRelativeMouse(true);
     }
 
     printf("Camera control scheme: %d -> %d\n", Camera->ControlScheme, NewControlScheme);

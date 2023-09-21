@@ -36,6 +36,27 @@ struct world_object_instance
     animation_state *AnimationState;
 };
 
+struct glyph_info
+{
+    vec2 GlyphUVs[4];
+
+    i32 MinX;
+    i32 MaxX;
+    i32 MinY;
+    i32 MaxY;
+    i32 Advance;
+};
+
+struct font_info
+{
+    u32 GlyphCount;
+    glyph_info *GlyphInfos;
+
+    u32 TextureID;
+    u32 PointSize;
+    u32 Height;
+};
+
 struct game_state
 {
     memory_arena RootArena;
@@ -49,12 +70,15 @@ struct game_state
     render_unit StaticRenderUnit;
     render_unit SkinnedRenderUnit;
     render_unit DebugDrawRenderUnit;
+    render_unit ImmTextRenderUnit;
     
     u32 WorldObjectBlueprintCount;
     world_object_blueprint *WorldObjectBlueprints;
     
     u32 WorldObjectInstanceCount;
     world_object_instance *WorldObjectInstances;
+
+    font_info *ContrailOne24;
 };
 
 #endif
