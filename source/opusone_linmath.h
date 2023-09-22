@@ -469,6 +469,24 @@ operator*(quat Q, f32 Scalar)
 }
 
 internal inline quat
+operator*(quat A, quat B)
+{
+    quat Result = {};
+    Result.W = A.W * B.W - A.X * B.X - A.Y * B.Y - A.Z * B.Z;
+    Result.X = A.W * B.X + A.X * B.W + A.Y * B.Z - A.Z * B.Y;
+    Result.Y = A.W * B.Y + A.Y * B.W + A.Z * B.X - A.X * B.Z;
+    Result.Z = A.W * B.Z + A.Z * B.W + A.X * B.Y - A.Y * B.X;
+    return Result;
+}
+
+internal inline quat &
+operator*=(quat &A, quat B)
+{
+    A = A * B;
+    return A;
+}
+
+internal inline quat
 operator/(quat Q, f32 Scalar)
 {
     quat Result = { Q.W / Scalar, Q.X / Scalar, Q.Y / Scalar, Q.Z / Scalar };
