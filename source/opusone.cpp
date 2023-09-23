@@ -65,7 +65,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             SimpleString("resources/models/box_room/BoxRoom.gltf"),
             SimpleString("resources/models/adam/adam_new.gltf"),
             SimpleString("resources/models/complex_animation_keys/AnimationStudy2c.gltf"),
-            SimpleString("resources/models/container2/container.gltf")
+            SimpleString("resources/models/container/Container.gltf")
         };
 
         GameState->WorldObjectBlueprintCount = ArrayCount(ModelPaths) + 1;
@@ -305,7 +305,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_instance { 2, Vec3(1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
             world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
             world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f), 0 },
-            world_object_instance { 4, Vec3(-3.0f, 0.5f, -3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 }
+            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 }
         };
 
         GameState->WorldObjectInstanceCount = ArrayCount(Instances) + 1;
@@ -452,7 +452,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     OpenGL_SetUniformVec3F(GameState->StaticRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->Camera.Position, true);
     OpenGL_SetUniformVec3F(GameState->SkinnedRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->Camera.Position, true);
 
-    GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(1.0f));
+    GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
     
     //
     // NOTE: Render

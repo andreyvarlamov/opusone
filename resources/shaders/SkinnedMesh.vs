@@ -42,7 +42,12 @@ void main()
     vec4 TransformedPosition = Model * BoneTransformedPosition;
     gl_Position = Projection * View * TransformedPosition;
     VS_UV = In_UV;
-        
+
+    // TODO: I think this is how to do this:
+    // Compute normal matrices for each bone in software by doing transpose inverse of model * bonetransform for each bone.
+    // Send over both BoneTransforms and NormalMatrices.
+    // Then using that, calculate TBN0-3 for each bone.
+    // Then apply those to light, view, frag positions. Then lerp that.
     mat3 NormalMatrix0 = mat3(transpose(inverse(Model * BoneTransforms[In_BoneIDs[0]])));
     vec3 Tangent0 = normalize(NormalMatrix0 * In_Tangent);
     vec3 Bitangent0 = normalize(NormalMatrix0 * In_Bitangent);
@@ -63,6 +68,7 @@ void main()
     vec3 Bitangent3 = normalize(NormalMatrix3 * In_Bitangent);
     vec3 Normal3 = normalize(NormalMatrix3 * In_Normal);
 
+    // TODO: is this right? Or should TBN still have 4 versions, and the transformed light/view/frag position are what have to be lerped?
     vec3 Tangent = (In_BoneWeights[0] * Tangent0 +
                     In_BoneWeights[1] * Tangent1 +
                     In_BoneWeights[2] * Tangent2 +
@@ -79,6 +85,7 @@ void main()
                    In_BoneWeights[3] * Normal3);
 
     mat3 TBN = transpose(mat3(Tangent, Bitangent, Normal));
+    // TODO: Renormalize light dir
     VS_LightDirectionTangentSpace = TBN * LightDirection;
     VS_ViewPositionTangentSpace = TBN * ViewPosition;
     VS_FragmentPositionTangentSpace = TBN * vec3(TransformedPosition);

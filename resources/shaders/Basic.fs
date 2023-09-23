@@ -21,23 +21,20 @@ void main()
     Normal = Normalize(NormalTexel * 2.0 - 1.0);
 #endif
 
-    float FragBrightness = 0.3;
-
+    vec3 DiffuseTexel = texture(DiffuseMap, VS_UV).rgb;
+    float AmbientBrightness = 0.2;
     vec3 NormalizedLightDirection = normalize(-VS_LightDirectionTangentSpace);
     float DiffuseBrightness = max(dot(NormalizedLightDirection, Normal), 0.0);
-    FragBrightness += DiffuseBrightness * 0.8;
+    vec3 FragDiffuse = DiffuseTexel * (AmbientBrightness + ((1 - AmbientBrightness) * DiffuseBrightness));
 
-#if 0
-    vec3 NormalizedViewDirection = normalize(VS_ViewPositionTangentSpace - VS_FragmentPositionTangentSpace);
-    vec3 HalfwayDirection = Normalize(NormalizedLightDirection + NormalizedViewDirection);
-    float SpecularBrigthness = pow(max(dot(Normal, HalfDirwection), 0.0), 128.0);
     vec3 SpecularTexel = texture(SpecularMap, VS_UV).rgb;
-    vec3 SpecularColor = SpecularColorSample * SpecularBrightness;
+    vec3 NormalizedViewDirection = normalize(VS_ViewPositionTangentSpace - VS_FragmentPositionTangentSpace);
+    vec3 HalfwayDirection = normalize(NormalizedLightDirection + NormalizedViewDirection);
+    float SpecularBrightness = pow(max(dot(Normal, HalfwayDirection), 0.0), 128.0);
+    vec3 FragSpecular = SpecularTexel * SpecularBrightness;
 
-    vec3 EmissionColor = texture(EmissionMap, VS_UV).rgb;
-#endif
-
-    vec3 FragColor = texture(DiffuseMap, VS_UV).rgb;
+    float EmissionBrightness = 0.5;
+    vec3 FragEmission = texture(EmissionMap, VS_UV).rgb;
     
-    Out_FragColor = vec4(FragBrightness * FragColor, 1.0);
+    Out_FragColor = vec4(FragDiffuse + FragSpecular + FragEmission, 1.0);
 }

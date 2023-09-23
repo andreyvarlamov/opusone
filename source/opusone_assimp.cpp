@@ -119,9 +119,9 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
 
             aiTextureType TextureTypes[] = { 
                 aiTextureType_DIFFUSE,
-                aiTextureType_SPECULAR,
+                aiTextureType_DIFFUSE_ROUGHNESS, // used for specular
                 aiTextureType_EMISSIVE,
-                aiTextureType_HEIGHT
+                aiTextureType_NORMALS
             };
 
             for (u32 TextureType = 0;
