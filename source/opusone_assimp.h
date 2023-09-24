@@ -18,6 +18,7 @@ struct imported_material
     simple_string TexturePaths[TEXTURE_TYPE_COUNT];
 };
 
+#define MAX_BONES_PER_MODEL 128
 #define MAX_BONE_CHILDREN 16
 struct imported_bone
 {

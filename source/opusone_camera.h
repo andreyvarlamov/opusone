@@ -22,6 +22,12 @@ struct camera
     camera_control_scheme ControlScheme;
 };
 
+internal void
+UpdateCameraSphericalOrientation(camera *Camera, f32 DeltaRadius, f32 DeltaTheta, f32 DeltaPhi);
+
+void
+SetThirdPersonCameraTarget(camera *Camera, vec3 Position);
+
 void
 SetCameraControlScheme(camera *Camera, camera_control_scheme NewControlScheme);
 

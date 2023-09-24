@@ -500,6 +500,13 @@ operator+(quat A, quat B)
     return Result;
 }
 
+internal inline quat
+QuatConjugate(quat Q)
+{
+    quat Result = Quat(Q.W, -Q.X, -Q.Y, -Q.Z);
+    return Result;
+}
+
 internal inline f32
 QuatDot(quat A, quat B)
 {
@@ -537,6 +544,17 @@ QuatSphericalLerp(quat A, quat B, f32 LerpFactor)
     // NOTE: Essential Mathematics, p. 467
     f32 Angle = ArcCosF(CosTheta);
     quat Result = (SinF((1 - LerpFactor) * Angle) * A + SinF(LerpFactor * Angle) * B) / SinF(Angle);
+    return Result;
+}
+
+internal inline vec3
+RotateVecByQuatSlow(vec3 V, quat Q)
+{
+    quat P = Quat(0.0f, V.X, V.Y, V.Z);
+    quat QConj = QuatConjugate(Q);
+
+    quat QResult = Q * P * QConj;
+    vec3 Result = Vec3(QResult.X, QResult.Y, QResult.Z);
     return Result;
 }
 

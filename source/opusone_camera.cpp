@@ -31,7 +31,7 @@ UpdateCameraOrientation(camera *Camera, f32 DeltaTheta, f32 DeltaPhi)
     }
 }
 
-internal void
+void
 UpdateCameraSphericalOrientation(camera *Camera, f32 DeltaRadius, f32 DeltaTheta, f32 DeltaPhi)
 {
     vec3 TranslationFromOldPositionToTarget = Camera->Radius * -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
@@ -72,6 +72,12 @@ UpdateCameraHorizontalPosition(camera *Camera, f32 MoveSpeedWorld, vec3 MoveDirL
     vec3 DeltaPositionWorld = LocalToWorld * MoveDirLocal;
     DeltaPositionWorld.Y = 0.0f;
     Camera->Position += MoveSpeedWorld * VecNormalize(DeltaPositionWorld);
+}
+
+void
+SetThirdPersonCameraTarget(camera *Camera, vec3 Position)
+{
+    Camera->Position = Position + Camera->Radius * VecSphericalToCartesian(Camera->Theta, Camera->Phi);
 }
 
 void

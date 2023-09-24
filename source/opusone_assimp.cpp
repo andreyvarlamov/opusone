@@ -154,7 +154,7 @@ Assimp_LoadModel(memory_arena *AssetArena, const char *Path)
     if (ArmatureNode && BoneCount > 0)
     {
         // TODO: See if this needs to handle more bones
-        u32 MaxBoneCount = 256;
+        u32 MaxBoneCount = MAX_BONES_PER_MODEL;
         Assert(BoneCount < MaxBoneCount);
 
         Model->Armature = MemoryArena_PushStruct(AssetArena, imported_armature);

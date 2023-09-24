@@ -29,7 +29,7 @@ TODO:
     - Use uniform buffers
     - Keep track of gl state in software, so don't do redundant gl calls
     - Uniform structs
-    - Shader modularity. Includes. How to do uniforms better.
+    - Shader modularity. Includes. How to do common uniforms better.
 
 - DCC/Export/Import
     - Optimize material export in gltf
@@ -44,6 +44,7 @@ TODO:
 
 
 - Scratch:
+    - Handle a skinned model in a rest pose better
     - More efficient normal transform matrix calculation (calculate for each bone in software and send in uniform).
     - Normal mapping is not implemented in the shader.
     - Do light calculations in view space.

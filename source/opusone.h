@@ -53,6 +53,9 @@ struct game_state
 
     font_info *ContrailOne;
     font_info *MajorMono;
+
+    f32 PlayerCameraYOffset;
+    u32 PlayerWorldInstanceID;
 };
 
 #endif

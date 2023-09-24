@@ -56,7 +56,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         u32 ImmTextShader = OpenGL_BuildShaderProgram("resources/shaders/ImmText.vs", "resources/shaders/ImmText.fs");
         OpenGL_SetUniformInt(SkinnedShader, "FontAtlas", 0, true);
 
-        InitializeCamera(&GameState->Camera, vec3 { 0.0f, 1.7f, 5.0f }, 0.0f, 90.0f, 5.0f, CAMERA_CONTROL_MOUSE);
+        InitializeCamera(&GameState->Camera, vec3 { 0.0f, 1.7f, 10.0f }, 0.0f, 90.0f, 2.0f, CAMERA_CONTROL_FPS);
 
         //
         // NOTE: Load models using assimp
@@ -305,13 +305,18 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_instance { 2, Vec3(1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
             world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
             world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f), 0 },
-            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 }
+            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
+            world_object_instance { 2, Vec3(0.0f, 0.0f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 }
         };
+
 
         GameState->WorldObjectInstanceCount = ArrayCount(Instances) + 1;
         GameState->WorldObjectInstances = MemoryArena_PushArray(&GameState->WorldArena,
                                                                 GameState->WorldObjectInstanceCount,
                                                                 world_object_instance);
+
+        GameState->PlayerCameraYOffset = 1.7f;
+        GameState->PlayerWorldInstanceID = 10;
         
         for (u32 InstanceIndex = 1;
              InstanceIndex < GameState->WorldObjectInstanceCount;
@@ -329,25 +334,32 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 Assert(Blueprint->ImportedModel->Animations);
                 Assert(Blueprint->ImportedModel->AnimationCount > 0);
 
-                Instance->AnimationState = MemoryArena_PushStruct(&GameState->WorldArena, animation_state);
-
-                Instance->AnimationState->Armature = Blueprint->ImportedModel->Armature;
-                
-                if (Instance->BlueprintID == 2)
+                if (InstanceIndex == GameState->PlayerWorldInstanceID)
                 {
-                    // NOTE: Adam: default animation - running
-                    Instance->AnimationState->Animation = Blueprint->ImportedModel->Animations + 2;
-                }
-                else if (Instance->BlueprintID == 3)
-                {
-                    Instance->AnimationState->Animation = Blueprint->ImportedModel->Animations;
+                    Instance->AnimationState = 0;
                 }
                 else
                 {
-                    // NOTE: All models with armature should have animation in animation state set
-                    InvalidCodePath;
+                    Instance->AnimationState = MemoryArena_PushStruct(&GameState->WorldArena, animation_state);
+
+                    Instance->AnimationState->Armature = Blueprint->ImportedModel->Armature;
+                
+                    if (Instance->BlueprintID == 2)
+                    {
+                        // NOTE: Adam: default animation - running
+                        Instance->AnimationState->Animation = Blueprint->ImportedModel->Animations + 2;
+                    }
+                    else if (Instance->BlueprintID == 3)
+                    {
+                        Instance->AnimationState->Animation = Blueprint->ImportedModel->Animations;
+                    }
+                    else
+                    {
+                        // NOTE: All models with armature should have animation in animation state set
+                        InvalidCodePath;
+                    }
+                    Instance->AnimationState->CurrentTicks = 0.0f;
                 }
-                Instance->AnimationState->CurrentTicks = 0.0f;
             }
 
             render_unit *RenderUnit = Blueprint->RenderUnit;
@@ -386,10 +398,92 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
 
     //
-    // NOTE: Camera
+    // NOTE: Player controls
     //
-    UpdateCameraForFrame(GameState, GameInput);
+    // UpdateCameraForFrame(GameState, GameInput);
+    // RetargetThirdPersonCamera(
+    f32 CameraDeltaTheta = (f32) -GameInput->MouseDeltaX * 0.1f;
+    f32 CameraDeltaPhi = (f32) -GameInput->MouseDeltaY * 0.1f;
+    UpdateCameraSphericalOrientation(&GameState->Camera, 0.0f, CameraDeltaTheta, CameraDeltaPhi);
 
+    world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
+    PlayerInstance->Rotation *= Quat(Vec3(0,1,0), ToRadiansF(CameraDeltaTheta));
+    vec3 PlayerTranslation = Vec3();
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_W])
+    {
+        PlayerTranslation.Z += 1.0f;
+    }
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_S])
+    {
+        PlayerTranslation.Z -= 1.0f;
+    }
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_A])
+    {
+        PlayerTranslation.X += 1.0f;
+    }
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_D])
+    {
+        PlayerTranslation.X -= 1.0f;
+    }
+    PlayerTranslation = RotateVecByQuatSlow(VecNormalize(PlayerTranslation), PlayerInstance->Rotation);
+    PlayerTranslation = 5.0f * GameInput->DeltaTime * PlayerTranslation;
+    vec3 PlayerDesiredPosition = PlayerInstance->Position + PlayerTranslation;
+
+    // TODO: Extents should be automatically calculated or imported from DCC
+    f32 AdamHeight = 1.8412f;
+    f32 AdamHalfHeight = AdamHeight * 0.5f;
+    vec3 AdamAABBExtents = Vec3 (0.3f, AdamHalfHeight, 0.3f);
+
+    b32 WillCollide = false;
+    for (u32 InstanceIndex = 1;
+         InstanceIndex < GameState->WorldObjectInstanceCount;
+         ++InstanceIndex)
+    {
+        if (InstanceIndex != GameState->PlayerWorldInstanceID)
+        {
+            world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
+
+            if (Instance->BlueprintID == 2)
+            {
+                b32 SeparatingAxisFound = false;
+                for (u32 AxisIndex = 0;
+                     AxisIndex < 3;
+                     ++AxisIndex)
+                {
+                    f32 PlayerCenter = PlayerDesiredPosition.E[AxisIndex];
+                    f32 PlayerMin = PlayerCenter - AdamAABBExtents.E[AxisIndex];
+                    f32 PlayerMax = PlayerCenter + AdamAABBExtents.E[AxisIndex];
+
+                    f32 OtherCenter = Instance->Position.E[AxisIndex];
+                    f32 OtherMin = OtherCenter - AdamAABBExtents.E[AxisIndex];
+                    f32 OtherMax = OtherCenter + AdamAABBExtents.E[AxisIndex];
+
+                    if (PlayerMax < OtherMin || PlayerMin > OtherMax)
+                    {
+                        SeparatingAxisFound = true;
+                        break;
+                    }
+                }
+
+                WillCollide |= !SeparatingAxisFound;
+                b32 ThisOneCollides = !SeparatingAxisFound;
+                
+                vec3 InstanceAABBPosition = Instance->Position + Vec3(0, AdamHalfHeight, 0);
+                vec3 Color = ThisOneCollides ? Vec3(1.0f, 0.0f, 0.0f) : Vec3(1.0f, 1.0f, 0.0f);
+                DD_PushAABox(&GameState->DebugDrawRenderUnit, InstanceAABBPosition, AdamAABBExtents, Color);
+            }
+        }
+    }
+
+    if (!WillCollide)
+    {
+        PlayerInstance->Position = PlayerDesiredPosition;
+        SetThirdPersonCameraTarget(&GameState->Camera, PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0));
+    }
+    
+    vec3 PlayerAABBPosition = PlayerInstance->Position + Vec3(0, AdamHalfHeight, 0);
+    vec3 Color = WillCollide ? Vec3(1.0f, 0.0f, 0.0f) : Vec3(1.0f, 1.0f, 0.0f);
+    DD_PushAABox(&GameState->DebugDrawRenderUnit, PlayerAABBPosition, AdamAABBExtents, Color);
     //
     // NOTE: Game logic update
     //
@@ -410,9 +504,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 
+#if 0
     vec3 BoxPosition = Vec3(-5.0f, 1.0f, 0.0f);
     vec3 BoxExtents = Vec3(1.0f, 1.0f, 1.0f);
-    
+
     for (u32 BoxIndex = 1;
          BoxIndex <= 5;
          ++BoxIndex)
@@ -420,17 +515,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         DD_PushAABox(&GameState->DebugDrawRenderUnit, BoxPosition, BoxExtents, Vec3(1.0f, 1.0f, 0.0f));
         BoxPosition.X += 2.5f;
     }
+#endif
 
     DD_PushCoordinateAxes(&GameState->DebugDrawRenderUnit,
-                          Vec3(),
+                          Vec3(-7.5f, 0.0f, -7.5f),
                           Vec3(1.0f, 0.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f), Vec3(0.0f, 0.0f, 1.0f),
                           3.0f);
-        
-    DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (5.0f, 0.0f, 5.0f), Vec3(1.0f, 0.0f, 0.5f), 3.0f);
-    DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (4.0f, 0.0f, 5.0f), Vec3(1.0f, 0.0f, 0.5f), 1.0f);
-    DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (6.0f, 0.0f, 5.0f), Vec3(1.0f, 0.0f, 0.5f), 50.0f);
-    DD_PushPoint(&GameState->DebugDrawRenderUnit, Vec3 (5.0f, 0.0f, 4.0f), Vec3(1.0f, 0.0f, 0.5f), 10.0f);
-
+    
     ImmText_DrawString("Hello, world!\nblah\n                   oooooooooooooooh\n\nyes",
                        GameState->ContrailOne,
                        5, 5, 2560, 1440,
@@ -540,6 +631,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
                             mat4 ModelTransform = Mat4GetFullTransform(Instance->Position, Instance->Rotation, Instance->Scale);
 
+                            if (InstanceID == GameState->PlayerWorldInstanceID)
+                            {
+                                Noop;
+                            }
+
                             if (Instance->AnimationState)
                             {
                                 imported_armature *Armature = Instance->AnimationState->Armature;
@@ -567,12 +663,26 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                         BoneTransform = BoneTransforms[BoneIndex] * Armature->Bones[BoneIndex].InverseBindTransform;
                                     }
 
-                                    simple_string UniformName;
-                                    sprintf_s(UniformName.D, "BoneTransforms[%d]", BoneIndex);
+                                    simple_string UniformName = SimpleStringF("BoneTransforms[%d]", BoneIndex);
                                     OpenGL_SetUniformMat4F(RenderUnit->ShaderID, UniformName.D, (f32 *) &BoneTransform, false);
                                 }
                         
                                 MemoryArena_Unfreeze(&GameState->RenderArena);
+                            }
+                            else
+                            {
+                                // TODO: Handle a skinned model in a rest pose better.
+                                // For now it just clears out all bones in uniforms, or it will keep the values of previous
+                                // skinned models being rendered.
+                                for (u32 BoneIndex = 0;
+                                     BoneIndex < MAX_BONES_PER_MODEL;
+                                     ++BoneIndex)
+                                {
+                                    mat4 BoneTransform = Mat4(1.0f);
+
+                                    simple_string UniformName = SimpleStringF("BoneTransforms[%d]", BoneIndex);
+                                    OpenGL_SetUniformMat4F(RenderUnit->ShaderID, UniformName.D, (f32 *) &BoneTransform, false);
+                                }
                             }
                             
                             OpenGL_SetUniformMat4F(RenderUnit->ShaderID, "Model", (f32 *) &ModelTransform, false);
@@ -591,15 +701,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 {
                     render_state_debug *DebugMarker = &Marker->StateD.Debug;
 
-                    if (DebugMarker->LineWidth > 1.0f)
-                    {
-                        glLineWidth(DebugMarker->LineWidth);
-                    }
-
-                    if (DebugMarker->PointSize > 1.0f)
-                    {
-                        glPointSize(DebugMarker->PointSize);
-                    }
+                    glLineWidth(DebugMarker->LineWidth);
+                    glPointSize(DebugMarker->PointSize);
 
                     if (DebugMarker->IsOverlay)
                     {
@@ -626,15 +729,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                         glDisable(GL_DEPTH_TEST);
                     }
                     
-                    if (DebugMarker->LineWidth > 1.0f)
-                    {
-                        glPointSize(1.0f);
-                    }
-                    
-                    if (DebugMarker->PointSize > 1.0f)
-                    {
-                        glLineWidth(1.0f);
-                    }
+                    glPointSize(1.0f);
+                    glLineWidth(1.0f);
                     
                 } break; // case RENDER_STATE_DEBUG
 
