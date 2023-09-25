@@ -285,9 +285,9 @@ VecScalarTriple(vec3 A, vec3 B, vec3 C)
 internal inline b32
 IsZeroVector(vec3 Vector)
 {
-    return ((Vector.X <= FLT_EPSILON) &&
-            (Vector.Y <= FLT_EPSILON) &&
-            (Vector.Z <= FLT_EPSILON));
+    return ((AbsF(Vector.X) <= FLT_EPSILON) &&
+            (AbsF(Vector.Y) <= FLT_EPSILON) &&
+            (AbsF(Vector.Z) <= FLT_EPSILON));
 }
 
 internal inline vec3

@@ -14,6 +14,20 @@
 
 #include "opusone_debug_draw.cpp"
 
+internal inline b32
+IsSeparatingAxisTriangleBox(vec3 TestAxis, vec3 A, vec3 B, vec3 C, vec3 BoxExtents, vec3 *BoxAxes)
+{
+    f32 AProj = VecDot(A, TestAxis);
+    f32 BProj = VecDot(B, TestAxis);
+    f32 CProj = VecDot(C, TestAxis);
+    f32 BoxRProj = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], TestAxis)) +
+                    BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], TestAxis)) +
+                    BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], TestAxis)));
+    f32 MaxTriVertProj = Max(-Max(Max(AProj, BProj), CProj), Min(Min(AProj, BProj), CProj));
+    b32 Result = (MaxTriVertProj > BoxRProj);
+    return Result;
+}
+
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameShouldQuit)
 {
@@ -37,7 +51,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->AssetArena = MemoryArenaNested(&GameState->RootArena, Megabytes(16));
 
         GameState->ContrailOne = ImmText_LoadFont(&GameState->AssetArena, "resources/fonts/ContrailOne-Regular.ttf", 36);
-        GameState->MajorMono = ImmText_LoadFont(&GameState->AssetArena, "resources/fonts/MajorMonoDisplay-Regular.ttf", 72);
+        // GameState->MajorMono = ImmText_LoadFont(&GameState->AssetArena, "resources/fonts/MajorMonoDisplay-Regular.ttf", 72);
 
         u32 StaticShader = OpenGL_BuildShaderProgram("resources/shaders/StaticMesh.vs", "resources/shaders/Basic.fs");
         OpenGL_SetUniformInt(StaticShader, "DiffuseMap", 0, true);
@@ -284,6 +298,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             RenderUnit->MarkerCount += ImportedModel->MeshCount;
         }
 
+        ImmText_InitializeQuickDraw(GameState->ContrailOne,
+                                    5, 5, 2560, 1440,
+                                    Vec3(1), Vec3(),
+                                    &GameState->ImmTextRenderUnit, &GameState->RenderArena);
+
         //
         // NOTE: OpenGL init state
         //
@@ -398,13 +417,21 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
 
     //
-    // NOTE: Player controls
+    // NOTE: Game logic update
     //
-    // UpdateCameraForFrame(GameState, GameInput);
-    // RetargetThirdPersonCamera(
-    f32 CameraDeltaTheta = (f32) -GameInput->MouseDeltaX * 0.1f;
-    f32 CameraDeltaPhi = (f32) -GameInput->MouseDeltaY * 0.1f;
-    UpdateCameraSphericalOrientation(&GameState->Camera, 0.0f, CameraDeltaTheta, CameraDeltaPhi);
+    f32 CameraDeltaTheta = (f32) -GameInput->MouseDeltaX * 0.035f;
+    f32 CameraDeltaPhi = (f32) -GameInput->MouseDeltaY * 0.035f;
+    f32 CameraDeltaRadius = 0.0f;
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_UP])
+    {
+        CameraDeltaRadius -= 1.0f;
+    }
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_DOWN])
+    {
+        CameraDeltaRadius += 1.0f;
+    }
+    CameraDeltaRadius *= 5.0f * GameInput->DeltaTime;
+    UpdateCameraSphericalOrientation(&GameState->Camera, CameraDeltaRadius, CameraDeltaTheta, CameraDeltaPhi);
 
     world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
     PlayerInstance->Rotation *= Quat(Vec3(0,1,0), ToRadiansF(CameraDeltaTheta));
@@ -425,9 +452,21 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     {
         PlayerTranslation.X -= 1.0f;
     }
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_LSHIFT])
+    {
+        PlayerTranslation.Y -= 1.0f;
+    }
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_SPACE])
+    {
+        PlayerTranslation.Y += 1.0f;
+    }
     PlayerTranslation = RotateVecByQuatSlow(VecNormalize(PlayerTranslation), PlayerInstance->Rotation);
     PlayerTranslation = 5.0f * GameInput->DeltaTime * PlayerTranslation;
     vec3 PlayerDesiredPosition = PlayerInstance->Position + PlayerTranslation;
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_LCTRL])
+    {
+        PlayerDesiredPosition.Y = 0.0f;
+    }
 
     // TODO: Extents should be automatically calculated or imported from DCC
     f32 AdamHeight = 1.8412f;
@@ -475,6 +514,103 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 
+    {
+        /*
+          vec3 TriA = Vec3(1,0,2);
+          vec3 TriB = Vec3(3,0,4);
+          vec3 TriC = Vec3(2,1.5f,3);
+         */
+        vec3 TriA = Vec3(1,0,2);
+        vec3 TriB = Vec3(3,0,2);
+        vec3 TriC = Vec3(2,1.5f,2);
+
+        // Do a generic Box-Triangle Separating Axis Test
+        {
+            vec3 BoxCenter = PlayerDesiredPosition;
+            vec3 BoxExtents = AdamAABBExtents;
+            vec3 BoxAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
+
+            // NOTE: Translate triangle as conceptually moving AABB to origin
+            vec3 A = TriA - BoxCenter;
+            vec3 B = TriB - BoxCenter;
+            vec3 C = TriC - BoxCenter;
+
+            b32 SeparatingAxisFound = false;
+
+            // NOTE: Compute edge vectors of triangle
+            vec3 AB = B - A;
+            vec3 BC = C - B;
+            vec3 CA = A - C;
+
+            //
+            // NOTE: Test exes a00..a22 (category 3)
+            //
+            vec3 Edges[] = { AB, BC, CA };
+            for (u32 BoxAxisIndex = 0;
+                 BoxAxisIndex < 3;
+                 ++BoxAxisIndex)
+            {
+                for (u32 EdgeIndex = 0;
+                     EdgeIndex < 3;
+                     ++EdgeIndex)
+                {
+                    vec3 TestAxis = VecCross(BoxAxes[BoxAxisIndex], Edges[EdgeIndex]);
+
+                    if (EdgeIndex == 1 && BoxAxisIndex == 2)
+                    {
+                        DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, Vec3(), TestAxis * 2.0f, Vec3(1,0,0));
+                        DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, Vec3(), BoxAxes[BoxAxisIndex] * 2.0f, Vec3(1));
+                        DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, Vec3(), Edges[EdgeIndex] * 2.0f, Vec3(1));
+                    }
+                    
+                    if (!IsZeroVector(TestAxis) && IsSeparatingAxisTriangleBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
+                    {
+                        SeparatingAxisFound = true;
+                        ImmText_DrawQuickString(SimpleStringF("Separating Axis: 3: %d,%d", BoxAxisIndex, EdgeIndex).D);
+                        break;
+                    }
+                }
+            }
+
+            if (!SeparatingAxisFound)
+            {
+                //
+                // NOTE: Test box's 3 normals (category 1)
+                //
+                for (u32 BoxAxisIndex = 0;
+                     BoxAxisIndex < 3;
+                     ++BoxAxisIndex)
+                {
+                    vec3 TestAxis = BoxAxes[BoxAxisIndex];
+                    if (IsSeparatingAxisTriangleBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
+                    {
+                        SeparatingAxisFound = true;
+                        ImmText_DrawQuickString(SimpleStringF("Separating Axis: 1: %d", BoxAxisIndex).D);
+                        break;
+                    }
+                }
+
+                if (!SeparatingAxisFound)
+                {
+                    //
+                    // NOTE: Test triangle's normal (category 2)
+                    //
+                    vec3 TriNormal = VecCross(AB, BC);
+                    if (!IsZeroVector(TriNormal) && IsSeparatingAxisTriangleBox(TriNormal, A, B, C, BoxExtents, BoxAxes))
+                    {
+                        SeparatingAxisFound = true;
+                        ImmText_DrawQuickString(SimpleStringF("Separating Axis: 2: TriNormal").D);
+                    }
+                }
+            }
+
+            // WillCollide |= !SeparatingAxisFound;
+            b32 ThisOneWillCollide = !SeparatingAxisFound;
+            vec3 Color = ThisOneWillCollide ? Vec3(1.0f, 0.0f, 0.0f) : Vec3(1.0f, 1.0f, 0.0f);
+            DD_PushTriangle(&GameState->DebugDrawRenderUnit, TriA, TriB, TriC, Color);
+        }
+    }
+
     if (!WillCollide)
     {
         PlayerInstance->Position = PlayerDesiredPosition;
@@ -484,9 +620,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     vec3 PlayerAABBPosition = PlayerInstance->Position + Vec3(0, AdamHalfHeight, 0);
     vec3 Color = WillCollide ? Vec3(1.0f, 0.0f, 0.0f) : Vec3(1.0f, 1.0f, 0.0f);
     DD_PushAABox(&GameState->DebugDrawRenderUnit, PlayerAABBPosition, AdamAABBExtents, Color);
-    //
-    // NOTE: Game logic update
-    //
+
+    DD_PushCoordinateAxes(&GameState->DebugDrawRenderUnit,
+                          Vec3(-7.5f, 0.0f, -7.5f),
+                          Vec3(1.0f, 0.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f), Vec3(0.0f, 0.0f, 1.0f),
+                          3.0f);
+    
     for (u32 InstanceIndex = 0;
          InstanceIndex < GameState->WorldObjectInstanceCount;
          ++InstanceIndex)
@@ -504,42 +643,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 
-#if 0
-    vec3 BoxPosition = Vec3(-5.0f, 1.0f, 0.0f);
-    vec3 BoxExtents = Vec3(1.0f, 1.0f, 1.0f);
-
-    for (u32 BoxIndex = 1;
-         BoxIndex <= 5;
-         ++BoxIndex)
-    {
-        DD_PushAABox(&GameState->DebugDrawRenderUnit, BoxPosition, BoxExtents, Vec3(1.0f, 1.0f, 0.0f));
-        BoxPosition.X += 2.5f;
-    }
-#endif
-
-    DD_PushCoordinateAxes(&GameState->DebugDrawRenderUnit,
-                          Vec3(-7.5f, 0.0f, -7.5f),
-                          Vec3(1.0f, 0.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f), Vec3(0.0f, 0.0f, 1.0f),
-                          3.0f);
+    //
+    // NOTE: UI
+    //
+    Noop;
     
-    ImmText_DrawString("Hello, world!\nblah\n                   oooooooooooooooh\n\nyes",
-                       GameState->ContrailOne,
-                       5, 5, 2560, 1440,
-                       // 5, 5, GameInput->OriginalScreenWidth, GameInput->OriginalScreenHeight,
-                       Vec4(1, 1, 1, 1), true, Vec3(), &GameState->ImmTextRenderUnit, &GameState->RenderArena);
-
-    ImmText_DrawString("STRINGstring",
-                       GameState->MajorMono,
-                       500, 30, 2560, 1440,
-                       // 5, 5, GameInput->OriginalScreenWidth, GameInput->OriginalScreenHeight,
-                       Vec4(1, 0, 0, 0.5f), true, Vec3(1), &GameState->ImmTextRenderUnit, &GameState->RenderArena);
-
-    ImmText_DrawString(SimpleStringF("hello, %0.3f", 0.3123212321f).D,
-                       GameState->ContrailOne,
-                       5, 500, 2560, 1440,
-                       // 5, 5, GameInput->OriginalScreenWidth, GameInput->OriginalScreenHeight,
-                       Vec4(1, 1, 1, 1), false, Vec3(), &GameState->ImmTextRenderUnit, &GameState->RenderArena);
-
     OpenGL_SetUniformVec3F(GameState->StaticRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->Camera.Position, true);
     OpenGL_SetUniformVec3F(GameState->SkinnedRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->Camera.Position, true);
 
@@ -701,8 +809,23 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 {
                     render_state_debug *DebugMarker = &Marker->StateD.Debug;
 
-                    glLineWidth(DebugMarker->LineWidth);
-                    glPointSize(DebugMarker->PointSize);
+                    if (DebugMarker->LineWidth >= 1.0f)
+                    {
+                        glLineWidth(DebugMarker->LineWidth);
+                    }
+                    else
+                    {
+                        glLineWidth(1.0f);
+                    }
+
+                    if (DebugMarker->PointSize >= 1.0f)
+                    {
+                        glPointSize(DebugMarker->PointSize);
+                    }
+                    else
+                    {
+                        glPointSize(1.0f);
+                    }
 
                     if (DebugMarker->IsOverlay)
                     {
@@ -729,8 +852,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                         glDisable(GL_DEPTH_TEST);
                     }
                     
-                    glPointSize(1.0f);
-                    glLineWidth(1.0f);
+                    if (DebugMarker->LineWidth >= 1.0f)
+                    {
+                        glLineWidth(1.0f);
+                    }
+                    if (DebugMarker->PointSize >= 1.0f)
+                    {
+                        glPointSize(1.0f);
+                    }
                     
                 } break; // case RENDER_STATE_DEBUG
 
@@ -762,6 +891,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             RenderUnit->MarkerCount = 0;
         }
     }
+
+    ImmText_ResetQuickDraw();
 }
 
 #include "opusone_camera.cpp"

@@ -34,4 +34,16 @@ void
 ImmText_DrawString(const char *String, font_info *FontInfo, i32 X, i32 Y, u32 ScreenWidth, u32 ScreenHeight,
                    vec4 Color, b32 DrawBackground, vec3 BackgroundColor, render_unit *RenderUnit, memory_arena *Arena);
 
+void
+ImmText_InitializeQuickDraw(font_info *Font,
+                            i32 X, i32 Y, i32 ScreenWidth, i32 ScreenHeight,
+                            vec3 Color, vec3 BgColor,
+                            render_unit *RenderUnit, memory_arena *Arena);
+
+void
+ImmText_DrawQuickString(const char *String);
+
+void
+ImmText_ResetQuickDraw();
+
 #endif

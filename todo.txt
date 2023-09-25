@@ -44,6 +44,17 @@ TODO:
 
 
 - Scratch:
+    - I don't think I need normals or alpha in debug draw vertex spec
+    - When to do mipmapping, when not to do mipmapping. Is that the right way to handle more distant objects? S and T axes
+    - Sort out the camera stuff after I go through the first pass over collisions
+        - Separate look direction, independent of orientation, on every entity?
+          ControlledEntity. Camera points to any entity, whether controlled or not. Camera matches the look direction of the entity.
+          That way can have a non-controlled entity followed by a camera, and the ControlledEntity not followed by a camera.
+        - Should camera be its own entity? How to detach camera, e.g. for level editing?
+        - Is it possible to collapse the whole crazy structure with calculating a view matrix differently.
+          It seems like I should be able to change the order of operations between translation and rotation, to have a target-camera.
+        - Change camera inner structures to collapse complexity. Use quaternion?
+        - Camera sliding if not enough room
     - Handle a skinned model in a rest pose better
     - More efficient normal transform matrix calculation (calculate for each bone in software and send in uniform).
     - Normal mapping is not implemented in the shader.
