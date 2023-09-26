@@ -298,9 +298,26 @@ MemoryArena_PushSize_(memory_arena *Arena, size_t Size)
     return Result;
 }
 
+inline void *
+MemoryArena_PushSizeAndZero_(memory_arena *Arena, size_t Size)
+{
+    void *Base = MemoryArena_PushSize_(Arena, Size);
+
+    u8 *Cursor = (u8 *) Base;
+    for (size_t ByteIndex = 0;
+         ByteIndex < Size;
+         ++ByteIndex)
+    {
+        *Cursor++ = 0;
+    }
+    
+    return Base;
+}
+
 #define MemoryArena_PushStruct(Arena, type) (type *) MemoryArena_PushSize_(Arena, sizeof(type))
 #define MemoryArena_PushArray(Arena, Count, type) (type *) MemoryArena_PushSize_(Arena, Count * sizeof(type))
 #define MemoryArena_PushBytes(Arena, ByteCount) (u8 *) MemoryArena_PushSize_(Arena, ByteCount)
+#define MemoryArena_PushArrayAndZero(Arena, Count, type) (type *) MemoryArena_PushSizeAndZero_(Arena, Count * sizeof(type))
 
 inline memory_arena
 MemoryArenaNested(memory_arena *Arena, size_t Size)
@@ -326,6 +343,13 @@ MemoryArena_Unfreeze(memory_arena *Arena)
         Arena->Used = Arena->PrevUsed;
         Arena->PrevUsed = 0;
     }
+}
+
+inline void
+MemoryArena_Reset(memory_arena *Arena)
+{
+    Arena->Used = 0;
+    Arena->PrevUsed = 0;
 }
 
 #endif

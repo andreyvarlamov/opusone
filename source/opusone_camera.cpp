@@ -48,6 +48,15 @@ UpdateCameraSphericalOrientation(camera *Camera, f32 DeltaRadius, f32 DeltaTheta
     Camera->Position += TranslationFromOldPositionToTarget + TranslationFromTargetToNewPosition;
 }
 
+void
+UpdateCameraForceRadius(camera *Camera, f32 Radius)
+{
+    vec3 TranslationFromOldPositionToTarget = Camera->Radius * -VecSphericalToCartesian(Camera->Theta, Camera->Phi);
+    Camera->Position += TranslationFromOldPositionToTarget;
+    
+    Camera->Radius = Radius;
+}
+
 internal inline mat3
 GetCameraLocalToWorldTransform(camera *Camera)
 {

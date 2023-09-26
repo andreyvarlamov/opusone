@@ -367,6 +367,13 @@ Vec4(vec3 V)
     return Result;
 }
 
+internal inline vec3
+Vec3(vec4 V)
+{
+    vec3 Result = Vec3(V.X, V.Y, V.Z);
+    return Result;
+}
+
 internal inline vec4
 operator+(vec4 V0, vec4 V1);
 

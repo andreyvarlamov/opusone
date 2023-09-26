@@ -13,6 +13,7 @@
 enum collision_type
 {
     COLLISION_TYPE_NONE,
+    COLLISION_TYPE_NONE_MOUSE,
     COLLISION_TYPE_MESH,
     COLLISION_TYPE_BV_AABB,
     COLLISION_TYPE_BV_SPHERE,
@@ -79,8 +80,10 @@ struct game_state
     memory_arena WorldArena;
     memory_arena RenderArena;
     memory_arena AssetArena;
+    memory_arena TransientArena;
     
     camera Camera;
+    b32 ForceFirstPersonTemp;
 
     render_unit StaticRenderUnit;
     render_unit SkinnedRenderUnit;
@@ -98,6 +101,8 @@ struct game_state
 
     f32 PlayerCameraYOffset;
     u32 PlayerWorldInstanceID;
+
+    b32 DebugCollisions;
 };
 
 #endif

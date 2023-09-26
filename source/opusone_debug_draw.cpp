@@ -55,6 +55,7 @@ DD_PushAABox(render_unit *RenderUnit, vec3 Position, vec3 Extents, vec3 Color)
     u32 IndexCount = ArrayCount(Indices);
 
     render_marker *Marker = RenderUnit->Markers + (RenderUnit->MarkerCount++);
+    Assert(RenderUnit->MarkerCount <= RenderUnit->MaxMarkerCount);
     *Marker = {};
     Marker->StateT = RENDER_STATE_DEBUG;
     Marker->BaseVertexIndex = RenderUnit->VertexCount;
@@ -88,6 +89,7 @@ DD_PushVector(render_unit *RenderUnit, vec3 A, vec3 B, vec3 AColor, vec3 BColor,
     u32 IndexCount = ArrayCount(Indices);
 
     render_marker *Marker = RenderUnit->Markers + (RenderUnit->MarkerCount++);
+    Assert(RenderUnit->MarkerCount <= RenderUnit->MaxMarkerCount);
     *Marker = {};
     Marker->StateT = RENDER_STATE_DEBUG;
     Marker->BaseVertexIndex = RenderUnit->VertexCount;
@@ -128,6 +130,7 @@ DD_PushPoint(render_unit *RenderUnit, vec3 Point, vec3 Color, f32 PointSize)
     u32 IndexCount = ArrayCount(Indices);
 
     render_marker *Marker = RenderUnit->Markers + (RenderUnit->MarkerCount++);
+    Assert(RenderUnit->MarkerCount <= RenderUnit->MaxMarkerCount);
     *Marker = {};
     Marker->StateT = RENDER_STATE_DEBUG;
     Marker->BaseVertexIndex = RenderUnit->VertexCount;
@@ -179,6 +182,7 @@ DD_PushTriangle(render_unit *RenderUnit, vec3 A, vec3 B, vec3 C, vec3 Color)
     u32 IndexCount = ArrayCount(Indices);
 
     render_marker *Marker = RenderUnit->Markers + (RenderUnit->MarkerCount++);
+    Assert(RenderUnit->MarkerCount <= RenderUnit->MaxMarkerCount);
     *Marker = {};
     Marker->StateT = RENDER_STATE_DEBUG;
     Marker->BaseVertexIndex = RenderUnit->VertexCount;

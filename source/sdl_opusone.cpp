@@ -55,6 +55,11 @@ main(int Argc, char *Argv[])
     f32 MonitorRefreshRate = 164.386f; // Hardcode from my display settings for now
     GameInput.DeltaTime = 1.0f / MonitorRefreshRate;
 
+    u64 PerfCounterFrequency = SDL_GetPerformanceFrequency();
+    u64 LastCounter = SDL_GetPerformanceCounter();
+    f64 PrevFrameDeltaTimeSec = 0.0f;
+    f64 FPS = 0.0f;
+
     b32 ShouldQuit = false;
     while (!ShouldQuit)
     {
@@ -89,6 +94,16 @@ main(int Argc, char *Argv[])
         GameUpdateAndRender(&GameInput, &GameMemory, &ShouldQuit);
 
         SDL_GL_SwapWindow(Window);
+
+        u64 CurrentCounter = SDL_GetPerformanceCounter();
+        u64 CounterElapsed = CurrentCounter - LastCounter;
+        LastCounter = CurrentCounter;
+        PrevFrameDeltaTimeSec = (f64) CounterElapsed / (f64) PerfCounterFrequency;
+        FPS = 1.0 / PrevFrameDeltaTimeSec;
+
+        char Title[256];
+        sprintf_s(Title, "Opus One [%0.3fFPS|%0.3fms]", FPS, PrevFrameDeltaTimeSec * 1000.0f);
+        SDL_SetWindowTitle(Window, Title);
     }
 
     SDL_Quit();
