@@ -965,6 +965,19 @@ Mat4GetRotationFromQuat(quat Q)
     return Result;
 }
 
+
+internal inline mat3
+Mat3GetScale(vec3 Scale)
+{
+    mat3 Result = Mat3();
+
+    Result.E[0][0] = Scale.X;
+    Result.E[1][1] = Scale.Y;
+    Result.E[2][2] = Scale.Z;
+
+    return Result;
+}
+
 internal inline mat4
 Mat4GetScale(vec3 Scale)
 {
@@ -977,10 +990,21 @@ Mat4GetScale(vec3 Scale)
     return Result;
 }
 
+internal inline mat3
+Mat3GetRotationAndScale(quat Rotation, vec3 Scale)
+{
+     // TODO: This can probably be optimized a lot
+    mat3 RotationTransform = Mat3GetRotationFromQuat(Rotation);
+    mat3 ScaleTransform = Mat3GetScale(Scale);
+    
+    mat3 Result = RotationTransform * ScaleTransform;
+    return Result;
+}
+
 internal inline mat4
 Mat4GetFullTransform(vec3 Position, quat Rotation, vec3 Scale)
 {
-    // TODO: This can probably be optimized a lot
+     // TODO: This can probably be optimized a lot
     mat4 TranslationTransform = Mat4GetTranslation(Position);
     mat4 RotationTransform = Mat4GetRotationFromQuat(Rotation);
     mat4 ScaleTransform = Mat4GetScale(Scale);

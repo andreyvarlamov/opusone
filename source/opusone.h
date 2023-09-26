@@ -10,6 +10,45 @@
 #include "opusone_animation.h"
 #include "opusone_immtext.h"
 
+enum collision_type
+{
+    COLLISION_TYPE_NONE,
+    COLLISION_TYPE_MESH,
+    COLLISION_TYPE_BV_AABB,
+    COLLISION_TYPE_BV_SPHERE,
+    COLLISION_TYPE_BV_HULL,
+};
+
+struct aabb
+{
+    vec3 Center;
+    vec3 Extents;
+};
+
+#if 0
+struct sphere
+{
+    vec3 Center;
+    f32 Radius;
+};
+
+struct hull
+{
+    u32 VertexCount;
+    u32 IndexCount;
+
+    vec3 *Vertices;
+    i32 *Indices;
+};
+#endif
+
+union collision_geometry
+{
+    aabb AABB;
+    /* sphere Sphere; */
+    /* hull Hull; */
+};
+
 struct world_object_blueprint
 {
     imported_model *ImportedModel;
@@ -17,6 +56,9 @@ struct world_object_blueprint
     render_unit *RenderUnit;
     u32 BaseMeshID;
     u32 MeshCount;
+
+    collision_geometry *BoundingVolume;
+    collision_type CollisionType;
 };
 
 struct world_object_instance

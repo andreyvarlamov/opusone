@@ -15,17 +15,87 @@
 #include "opusone_debug_draw.cpp"
 
 internal inline b32
-IsSeparatingAxisTriangleBox(vec3 TestAxis, vec3 A, vec3 B, vec3 C, vec3 BoxExtents, vec3 *BoxAxes)
+IsSeparatingAxisTriBox(vec3 TestAxis, vec3 A, vec3 B, vec3 C, vec3 BoxExtents, vec3 *BoxAxes)
 {
     f32 AProj = VecDot(A, TestAxis);
     f32 BProj = VecDot(B, TestAxis);
     f32 CProj = VecDot(C, TestAxis);
+#if 0
+    f32 MinTriProj = Min(Min(AProj, BProj), CProj);
+    f32 MaxTriProj = Max(Max(AProj, BProj), CProj);
+    f32 MaxBoxProj = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], TestAxis)) +
+                      BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], TestAxis)) +
+                      BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], TestAxis)));
+    f32 MinBoxProj = -MaxBoxProj;
+    b32 Result = (MaxTriProj < MinBoxProj || MinTriProj > MaxBoxProj);
+#else
     f32 BoxRProj = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], TestAxis)) +
                     BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], TestAxis)) +
                     BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], TestAxis)));
     f32 MaxTriVertProj = Max(-Max(Max(AProj, BProj), CProj), Min(Min(AProj, BProj), CProj));
     b32 Result = (MaxTriVertProj > BoxRProj);
+#endif
     return Result;
+}
+
+internal inline b32
+IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes)
+{
+    // NOTE: Translate triangle as conceptually moving AABB to origin
+    A -= BoxCenter;
+    B -= BoxCenter;
+    C -= BoxCenter;
+
+    // NOTE: Compute edge vectors of triangle
+    vec3 AB = B - A;
+    vec3 BC = C - B;
+    vec3 CA = A - C;
+
+    //
+    // NOTE: Test exes a00..a22 (category 3)
+    //
+    vec3 Edges[] = { AB, BC, CA };
+    for (u32 BoxAxisIndex = 0;
+         BoxAxisIndex < 3;
+         ++BoxAxisIndex)
+    {
+        for (u32 EdgeIndex = 0;
+             EdgeIndex < 3;
+             ++EdgeIndex)
+        {
+            vec3 TestAxis = VecCross(BoxAxes[BoxAxisIndex], Edges[EdgeIndex]);
+
+            if (!IsZeroVector(TestAxis) && IsSeparatingAxisTriBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
+            {
+                return true;
+            }
+        }
+    }
+
+    //
+    // NOTE: Test box's 3 normals (category 1)
+    //
+    for (u32 BoxAxisIndex = 0;
+         BoxAxisIndex < 3;
+         ++BoxAxisIndex)
+    {
+        vec3 TestAxis = BoxAxes[BoxAxisIndex];
+        if (IsSeparatingAxisTriBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
+        {
+            return true;
+        }
+    }
+
+    //
+    // NOTE: Test triangle's normal (category 2)
+    //
+    vec3 TriNormal = VecCross(AB, BC);
+    if (!IsZeroVector(TriNormal) && IsSeparatingAxisTriBox(TriNormal, A, B, C, BoxExtents, BoxAxes))
+    {
+        return true;
+    }
+
+    return false;
 }
 
 void
@@ -82,7 +152,17 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             SimpleString("resources/models/container/Container.gltf")
         };
 
-        GameState->WorldObjectBlueprintCount = ArrayCount(ModelPaths) + 1;
+        collision_type BlueprintCollisionTypes[] = {
+            COLLISION_TYPE_MESH,
+            COLLISION_TYPE_BV_AABB,
+            COLLISION_TYPE_NONE,
+            COLLISION_TYPE_NONE
+        };
+
+        i32 ModelCount = ArrayCount(ModelPaths);
+        Assert(ModelCount == ArrayCount(BlueprintCollisionTypes));
+
+        GameState->WorldObjectBlueprintCount = ModelCount + 1;
         GameState->WorldObjectBlueprints = MemoryArena_PushArray(&GameState->WorldArena,
                                                                  GameState->WorldObjectBlueprintCount,
                                                                  world_object_blueprint);
@@ -95,6 +175,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             *Blueprint = {};
             
             Blueprint->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, ModelPaths[BlueprintIndex-1].D);
+            Blueprint->CollisionType = BlueprintCollisionTypes[BlueprintIndex-1];
         }
 
         //
@@ -290,6 +371,33 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                            ImportedMesh->VertexCount, ImportedMesh->IndexCount);
             }
 
+            switch (Blueprint->CollisionType)
+            {
+                case COLLISION_TYPE_NONE:
+                case COLLISION_TYPE_MESH:
+                {
+                    Blueprint->BoundingVolume = 0;
+                } break;
+                
+                case COLLISION_TYPE_BV_AABB:
+                {
+                    // TODO: Handle properly for different models
+                    f32 AdamHeight = 1.8412f;
+                    f32 AdamHalfHeight = AdamHeight * 0.5f;
+
+                    collision_geometry *Collision = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
+                    Collision->AABB = {};
+                    Collision->AABB.Center = Vec3(0, AdamHalfHeight, 0);
+                    Collision->AABB.Extents = Vec3 (0.3f, AdamHalfHeight, 0.3f);
+                    Blueprint->BoundingVolume = Collision;
+                } break;
+                
+                default:
+                {
+                    InvalidCodePath;
+                } break;
+            }
+
             Blueprint->RenderUnit = RenderUnit;
             Blueprint->BaseMeshID = RenderUnit->MarkerCount;
             Blueprint->MeshCount = ImportedModel->MeshCount;
@@ -325,7 +433,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
             world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f), 0 },
             world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 2, Vec3(0.0f, 0.0f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 }
+            world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 }
         };
 
 
@@ -415,6 +523,16 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     {
         *GameShouldQuit = true;
     }
+    b32 IgnoreCollisions = GameInput->CurrentKeyStates[SDL_SCANCODE_LALT];
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_F1] && !GameInput->KeyWasDown[SDL_SCANCODE_F1])
+    {
+        SetCameraControlScheme(&GameState->Camera, (camera_control_scheme) ((i32) GameState->Camera.ControlScheme + 1));
+        GameInput->KeyWasDown[SDL_SCANCODE_F1] = true;
+    }
+    else if (!GameInput->CurrentKeyStates[SDL_SCANCODE_F1])
+    {
+        GameInput->KeyWasDown[SDL_SCANCODE_F1] = false;
+    }
 
     //
     // NOTE: Game logic update
@@ -434,6 +552,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     UpdateCameraSphericalOrientation(&GameState->Camera, CameraDeltaRadius, CameraDeltaTheta, CameraDeltaPhi);
 
     world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
+    world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
+    
     PlayerInstance->Rotation *= Quat(Vec3(0,1,0), ToRadiansF(CameraDeltaTheta));
     vec3 PlayerTranslation = Vec3();
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_W])
@@ -468,10 +588,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         PlayerDesiredPosition.Y = 0.0f;
     }
 
-    // TODO: Extents should be automatically calculated or imported from DCC
-    f32 AdamHeight = 1.8412f;
-    f32 AdamHalfHeight = AdamHeight * 0.5f;
-    vec3 AdamAABBExtents = Vec3 (0.3f, AdamHalfHeight, 0.3f);
+    Assert(PlayerBlueprint->BoundingVolume);
+    aabb *PlayerAABB = &PlayerBlueprint->BoundingVolume->AABB;
+    vec3 AABoxAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
 
     b32 WillCollide = false;
     for (u32 InstanceIndex = 1;
@@ -481,145 +600,140 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         if (InstanceIndex != GameState->PlayerWorldInstanceID)
         {
             world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
+            world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
 
-            if (Instance->BlueprintID == 2)
+            switch (Blueprint->CollisionType)
             {
-                b32 SeparatingAxisFound = false;
-                for (u32 AxisIndex = 0;
-                     AxisIndex < 3;
-                     ++AxisIndex)
+                case COLLISION_TYPE_NONE:
                 {
-                    f32 PlayerCenter = PlayerDesiredPosition.E[AxisIndex];
-                    f32 PlayerMin = PlayerCenter - AdamAABBExtents.E[AxisIndex];
-                    f32 PlayerMax = PlayerCenter + AdamAABBExtents.E[AxisIndex];
+                    continue;
+                } break;
 
-                    f32 OtherCenter = Instance->Position.E[AxisIndex];
-                    f32 OtherMin = OtherCenter - AdamAABBExtents.E[AxisIndex];
-                    f32 OtherMax = OtherCenter + AdamAABBExtents.E[AxisIndex];
+                case COLLISION_TYPE_MESH:
+                {
+                    imported_model *ImportedModel = Blueprint->ImportedModel;
 
-                    if (PlayerMax < OtherMin || PlayerMin > OtherMax)
+                    vec3 InstanceTranslation = Instance->Position;
+                    mat3 InstanceTransform = Mat3GetRotationAndScale(Instance->Rotation, Instance->Scale);
+
+                    for (u32 ImportedMeshIndex = 0;
+                         ImportedMeshIndex < ImportedModel->MeshCount;
+                         ++ImportedMeshIndex)
                     {
-                        SeparatingAxisFound = true;
-                        break;
-                    }
-                }
+                        imported_mesh *ImportedMesh = ImportedModel->Meshes + ImportedMeshIndex;
 
-                WillCollide |= !SeparatingAxisFound;
-                b32 ThisOneCollides = !SeparatingAxisFound;
+                        u32 TriangleCount = ImportedMesh->IndexCount / 3;
+                        Assert(ImportedMesh->IndexCount % 3 == 0);
+
+                        for (u32 TriangleIndex = 0;
+                             TriangleIndex < TriangleCount;
+                             ++TriangleIndex)
+                        {
+                            u32 BaseIndexIndex = TriangleIndex * 3;
+                            i32 IndexA = ImportedMesh->Indices[BaseIndexIndex];
+                            i32 IndexB = ImportedMesh->Indices[BaseIndexIndex+1];
+                            i32 IndexC = ImportedMesh->Indices[BaseIndexIndex+2];
+                            vec3 A = InstanceTransform * ImportedMesh->VertexPositions[IndexA] + InstanceTranslation;
+                            vec3 B = InstanceTransform * ImportedMesh->VertexPositions[IndexB] + InstanceTranslation;
+                            vec3 C = InstanceTransform * ImportedMesh->VertexPositions[IndexC] + InstanceTranslation;
+
+                            b32 IsPlayerAndTriSeparated =
+                                IsThereASeparatingAxisTriBox(A, B, C,
+                                                             PlayerDesiredPosition + PlayerAABB->Center,
+                                                             PlayerAABB->Extents, AABoxAxes);
+
+                            if (!IsPlayerAndTriSeparated)
+                            {
+                                DD_PushTriangle(&GameState->DebugDrawRenderUnit, A, B, C, Vec3(1,0,0));
+                                ImmText_DrawQuickString(SimpleStringF("Colliding with Instance ID %d: triangle %d",
+                                                                      InstanceIndex, TriangleIndex).D);
+                            }
+
+                            WillCollide |= !IsPlayerAndTriSeparated;
+                        }
+                    }
+                } break;
                 
-                vec3 InstanceAABBPosition = Instance->Position + Vec3(0, AdamHalfHeight, 0);
-                vec3 Color = ThisOneCollides ? Vec3(1.0f, 0.0f, 0.0f) : Vec3(1.0f, 1.0f, 0.0f);
-                DD_PushAABox(&GameState->DebugDrawRenderUnit, InstanceAABBPosition, AdamAABBExtents, Color);
+                case COLLISION_TYPE_BV_AABB:
+                {
+                    Assert(Blueprint->BoundingVolume);
+                    aabb *AABB = &Blueprint->BoundingVolume->AABB;
+                        
+                    b32 SeparatingAxisFound = false;
+                    for (u32 AxisIndex = 0;
+                         AxisIndex < 3;
+                         ++AxisIndex)
+                    {
+                        f32 PlayerCenter = PlayerDesiredPosition.E[AxisIndex] + PlayerAABB->Center.E[AxisIndex];
+                        f32 PlayerMin = PlayerCenter - PlayerAABB->Extents.E[AxisIndex];
+                        f32 PlayerMax = PlayerCenter + PlayerAABB->Extents.E[AxisIndex];
+
+                        f32 OtherCenter = Instance->Position.E[AxisIndex] + AABB->Center.E[AxisIndex];
+                        f32 OtherMin = OtherCenter - AABB->Extents.E[AxisIndex];
+                        f32 OtherMax = OtherCenter + AABB->Extents.E[AxisIndex];
+
+                        if (PlayerMax < OtherMin || PlayerMin > OtherMax)
+                        {
+                            SeparatingAxisFound = true;
+                            break;
+                        }
+                    }
+
+                    WillCollide |= !SeparatingAxisFound;
+                    b32 ThisOneCollides = !SeparatingAxisFound;
+
+                    if (ThisOneCollides)
+                    {
+                        ImmText_DrawQuickString(SimpleStringF("Colliding with Instance ID %d: aabb",
+                                                              InstanceIndex).D);
+                    }
+                
+                    vec3 InstanceAABBPosition = Instance->Position + AABB->Center;
+                    vec3 Color = ThisOneCollides ? Vec3(1.0f, 0.0f, 0.0f) : Vec3(1.0f, 1.0f, 0.0f);
+                    DD_PushAABox(&GameState->DebugDrawRenderUnit, InstanceAABBPosition, AABB->Extents, Color);
+                } break;
+
+                default:
+                {
+                    InvalidCodePath;
+                } break;
             }
+
+            // if (Instance->BlueprintID == 2)
+            // {
+            // }
         }
     }
 
-    {
-        /*
-          vec3 TriA = Vec3(1,0,2);
-          vec3 TriB = Vec3(3,0,4);
-          vec3 TriC = Vec3(2,1.5f,3);
-         */
-        vec3 TriA = Vec3(1,0,2);
-        vec3 TriB = Vec3(3,0,2);
-        vec3 TriC = Vec3(2,1.5f,2);
+#if 0
+    // vec3 TriA = Vec3(1,0,2);
+    // vec3 TriB = Vec3(3,0,4);
+    // vec3 TriC = Vec3(2,1.5f,3);
 
-        // Do a generic Box-Triangle Separating Axis Test
-        {
-            vec3 BoxCenter = PlayerDesiredPosition;
-            vec3 BoxExtents = AdamAABBExtents;
-            vec3 BoxAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
+    vec3 TriA = Vec3(1,0,2);
+    vec3 TriB = Vec3(3,0,2);
+    vec3 TriC = Vec3(2,1.5f,2);
 
-            // NOTE: Translate triangle as conceptually moving AABB to origin
-            vec3 A = TriA - BoxCenter;
-            vec3 B = TriB - BoxCenter;
-            vec3 C = TriC - BoxCenter;
+    // Do a generic Box-Triangle Separating Axis Test
+    b32 IsPlayerAndTriSeparated = IsThereASeparatingAxisTriBox(TriA, TriB, TriC,
+                                                               PlayerDesiredPosition + Vec3(0, AdamHalfHeight, 0),
+                                                               AdamAABBExtents, AABoxAxes);
+    
+    vec3 TriColor = IsPlayerAndTriSeparated ? Vec3(1.0f, 1.0f, 0.0f) : Vec3(1.0f, 0.0f, 0.0f);
+    DD_PushTriangle(&GameState->DebugDrawRenderUnit, TriA, TriB, TriC, TriColor);
 
-            b32 SeparatingAxisFound = false;
+    WillCollide |= !IsPlayerAndTriSeparated;
+#endif
 
-            // NOTE: Compute edge vectors of triangle
-            vec3 AB = B - A;
-            vec3 BC = C - B;
-            vec3 CA = A - C;
-
-            //
-            // NOTE: Test exes a00..a22 (category 3)
-            //
-            vec3 Edges[] = { AB, BC, CA };
-            for (u32 BoxAxisIndex = 0;
-                 BoxAxisIndex < 3;
-                 ++BoxAxisIndex)
-            {
-                for (u32 EdgeIndex = 0;
-                     EdgeIndex < 3;
-                     ++EdgeIndex)
-                {
-                    vec3 TestAxis = VecCross(BoxAxes[BoxAxisIndex], Edges[EdgeIndex]);
-
-                    if (EdgeIndex == 1 && BoxAxisIndex == 2)
-                    {
-                        DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, Vec3(), TestAxis * 2.0f, Vec3(1,0,0));
-                        DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, Vec3(), BoxAxes[BoxAxisIndex] * 2.0f, Vec3(1));
-                        DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, Vec3(), Edges[EdgeIndex] * 2.0f, Vec3(1));
-                    }
-                    
-                    if (!IsZeroVector(TestAxis) && IsSeparatingAxisTriangleBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
-                    {
-                        SeparatingAxisFound = true;
-                        ImmText_DrawQuickString(SimpleStringF("Separating Axis: 3: %d,%d", BoxAxisIndex, EdgeIndex).D);
-                        break;
-                    }
-                }
-            }
-
-            if (!SeparatingAxisFound)
-            {
-                //
-                // NOTE: Test box's 3 normals (category 1)
-                //
-                for (u32 BoxAxisIndex = 0;
-                     BoxAxisIndex < 3;
-                     ++BoxAxisIndex)
-                {
-                    vec3 TestAxis = BoxAxes[BoxAxisIndex];
-                    if (IsSeparatingAxisTriangleBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
-                    {
-                        SeparatingAxisFound = true;
-                        ImmText_DrawQuickString(SimpleStringF("Separating Axis: 1: %d", BoxAxisIndex).D);
-                        break;
-                    }
-                }
-
-                if (!SeparatingAxisFound)
-                {
-                    //
-                    // NOTE: Test triangle's normal (category 2)
-                    //
-                    vec3 TriNormal = VecCross(AB, BC);
-                    if (!IsZeroVector(TriNormal) && IsSeparatingAxisTriangleBox(TriNormal, A, B, C, BoxExtents, BoxAxes))
-                    {
-                        SeparatingAxisFound = true;
-                        ImmText_DrawQuickString(SimpleStringF("Separating Axis: 2: TriNormal").D);
-                    }
-                }
-            }
-
-            // WillCollide |= !SeparatingAxisFound;
-            b32 ThisOneWillCollide = !SeparatingAxisFound;
-            vec3 Color = ThisOneWillCollide ? Vec3(1.0f, 0.0f, 0.0f) : Vec3(1.0f, 1.0f, 0.0f);
-            DD_PushTriangle(&GameState->DebugDrawRenderUnit, TriA, TriB, TriC, Color);
-        }
-    }
-
-    if (!WillCollide)
+    if (!WillCollide || IgnoreCollisions)
     {
         PlayerInstance->Position = PlayerDesiredPosition;
-        SetThirdPersonCameraTarget(&GameState->Camera, PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0));
     }
+    SetThirdPersonCameraTarget(&GameState->Camera, PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0));
     
-    vec3 PlayerAABBPosition = PlayerInstance->Position + Vec3(0, AdamHalfHeight, 0);
+    vec3 PlayerAABBPosition = PlayerInstance->Position + PlayerAABB->Center;
     vec3 Color = WillCollide ? Vec3(1.0f, 0.0f, 0.0f) : Vec3(1.0f, 1.0f, 0.0f);
-    DD_PushAABox(&GameState->DebugDrawRenderUnit, PlayerAABBPosition, AdamAABBExtents, Color);
+    DD_PushAABox(&GameState->DebugDrawRenderUnit, PlayerAABBPosition, PlayerAABB->Extents, Color);
 
     DD_PushCoordinateAxes(&GameState->DebugDrawRenderUnit,
                           Vec3(-7.5f, 0.0f, -7.5f),
