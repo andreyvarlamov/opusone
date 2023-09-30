@@ -52,7 +52,8 @@ main(int Argc, char *Argv[])
     GameInput.OriginalScreenHeight = GameInput.ScreenHeight;
     glViewport(0, 0, GameInput.ScreenWidth, GameInput.ScreenHeight);
 
-    f32 MonitorRefreshRate = 164.386f; // Hardcode from my display settings for now
+    //f32 MonitorRefreshRate = 164.386f; // Hardcode from my display settings for now
+    f32 MonitorRefreshRate = 60.f; // Hardcode from my display settings for now
     GameInput.DeltaTime = 1.0f / MonitorRefreshRate;
 
     u64 PerfCounterFrequency = SDL_GetPerformanceFrequency();

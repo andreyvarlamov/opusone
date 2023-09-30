@@ -269,7 +269,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             COLLISION_TYPE_MESH,
             COLLISION_TYPE_BV_AABB,
             COLLISION_TYPE_NONE,
-            COLLISION_TYPE_NONE
+            COLLISION_TYPE_MESH
         };
 
         i32 ModelCount = ArrayCount(ModelPaths);
@@ -541,17 +541,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_instance { 1, Vec3(20.0f,0.0f, 0.0f), Quat(Vec3(0.0f, 1.0f, 1.0f), ToRadiansF(45.0f)), Vec3(0.5f, 1.0f, 2.0f), 0 },
             world_object_instance { 1, Vec3(0.0f,0.0f,-30.0f), Quat(Vec3(1.0f, 1.0f,1.0f), ToRadiansF(160.0f)), Vec3(1.0f, 1.0f, 5.0f), 0 },
             world_object_instance { 2, Vec3(0.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-#if 1
             world_object_instance { 2, Vec3(-1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
             world_object_instance { 2, Vec3(1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
             world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-#else
-            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-#endif
             world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f), 0 },
-            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
+            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(Vec3(0,1,0), ToRadiansF(45.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 },
             world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 }
         };
 
@@ -674,6 +668,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     //
     // NOTE: Game logic update
     //
+    // GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
+    
     f32 CameraDeltaTheta = (f32) -GameInput->MouseDeltaX * 0.035f;
     f32 CameraDeltaPhi = (f32) -GameInput->MouseDeltaY * 0.035f;
     f32 CameraDeltaRadius = 0.0f;
@@ -723,12 +719,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
     PlayerTranslation = RotateVecByQuatSlow(VecNormalize(PlayerTranslation), PlayerInstance->Rotation);
     PlayerTranslation = 5.0f * GameInput->DeltaTime * PlayerTranslation;
-    vec3 PlayerDesiredPosition = PlayerInstance->Position + PlayerTranslation;
+    // TODO: Make this work with collisions
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_LCTRL])
     {
-        PlayerDesiredPosition.Y = 0.0f;
+        PlayerInstance->Position.Y = 0.0f;
     }
-
+    
     Assert(PlayerBlueprint->BoundingVolume);
     aabb *PlayerAABB = &PlayerBlueprint->BoundingVolume->AABB;
     vec3 AABoxAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
@@ -752,120 +748,168 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             MemoryArena_PushArrayAndZero(&GameState->TransientArena, GameState->WorldObjectInstanceCount, collision_debug_data);
     }
 
-    b32 WillCollide = false;
-    for (u32 InstanceIndex = 1;
-         InstanceIndex < GameState->WorldObjectInstanceCount;
-         ++InstanceIndex)
+    u32 CollisionIterations = 3;
+    b32 PlayerDidCollide = false;
+    for (u32 IterationIndex = 0;
+         IterationIndex < CollisionIterations;
+         ++IterationIndex)
     {
-        if (InstanceIndex != GameState->PlayerWorldInstanceID)
+        f32 ShortestPenetratingDistance = FLT_MAX;
+        u32 ShortestPenetratingAxis = 0;
+        b32 ShortestAxisShouldBeInverted = false;
+        vec3 CollisionNormal = {};
+        b32 WillCollide = false;
+        for (u32 InstanceIndex = 1;
+             InstanceIndex < GameState->WorldObjectInstanceCount;
+             ++InstanceIndex)
         {
-            world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
-            world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
-
-            switch (Blueprint->CollisionType)
+            if (InstanceIndex != GameState->PlayerWorldInstanceID)
             {
-                case COLLISION_TYPE_NONE:
+                world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
+                world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
+
+                switch (Blueprint->CollisionType)
                 {
-                    continue;
-                } break;
-
-                case COLLISION_TYPE_MESH:
-                {
-                    imported_model *ImportedModel = Blueprint->ImportedModel;
-
-                    vec3 InstanceTranslation = Instance->Position;
-                    mat3 InstanceTransform = Mat3GetRotationAndScale(Instance->Rotation, Instance->Scale);
-
-                    for (u32 ImportedMeshIndex = 0;
-                         ImportedMeshIndex < ImportedModel->MeshCount;
-                         ++ImportedMeshIndex)
+                    case COLLISION_TYPE_NONE:
                     {
-                        imported_mesh *ImportedMesh = ImportedModel->Meshes + ImportedMeshIndex;
+                        continue;
+                    } break;
 
-                        u32 TriangleCount = ImportedMesh->IndexCount / 3;
-                        Assert(ImportedMesh->IndexCount % 3 == 0);
+                    case COLLISION_TYPE_MESH:
+                    {
+                        imported_model *ImportedModel = Blueprint->ImportedModel;
 
-                        for (u32 TriangleIndex = 0;
-                             TriangleIndex < TriangleCount;
-                             ++TriangleIndex)
+                        vec3 InstanceTranslation = Instance->Position;
+                        mat3 InstanceTransform = Mat3GetRotationAndScale(Instance->Rotation, Instance->Scale);
+
+                        for (u32 ImportedMeshIndex = 0;
+                             ImportedMeshIndex < ImportedModel->MeshCount;
+                             ++ImportedMeshIndex)
                         {
-                            u32 BaseIndexIndex = TriangleIndex * 3;
-                            i32 IndexA = ImportedMesh->Indices[BaseIndexIndex];
-                            i32 IndexB = ImportedMesh->Indices[BaseIndexIndex+1];
-                            i32 IndexC = ImportedMesh->Indices[BaseIndexIndex+2];
-                            vec3 A = InstanceTransform * ImportedMesh->VertexPositions[IndexA] + InstanceTranslation;
-                            vec3 B = InstanceTransform * ImportedMesh->VertexPositions[IndexB] + InstanceTranslation;
-                            vec3 C = InstanceTransform * ImportedMesh->VertexPositions[IndexC] + InstanceTranslation;
+                            imported_mesh *ImportedMesh = ImportedModel->Meshes + ImportedMeshIndex;
 
-                            b32 IsPlayerAndTriSeparated =
-                                IsThereASeparatingAxisTriBox(A, B, C,
-                                                             PlayerDesiredPosition + PlayerAABB->Center,
-                                                             PlayerAABB->Extents, AABoxAxes);
+                            u32 TriangleCount = ImportedMesh->IndexCount / 3;
+                            Assert(ImportedMesh->IndexCount % 3 == 0);
 
-                            if (!IsPlayerAndTriSeparated && CollisionDebugData)
+                            for (u32 TriangleIndex = 0;
+                                 TriangleIndex < TriangleCount;
+                                 ++TriangleIndex)
                             {
-                                CollisionDebugData[InstanceIndex].IsColliding = true;
-                                CollisionDebugData[InstanceIndex].CollisionTri[0] = A;
-                                CollisionDebugData[InstanceIndex].CollisionTri[1] = B;
-                                CollisionDebugData[InstanceIndex].CollisionTri[2] = C;
-                                CollisionDebugData[InstanceIndex].CollisionTriIndex = TriangleIndex;
+                                u32 BaseIndexIndex = TriangleIndex * 3;
+                                i32 IndexA = ImportedMesh->Indices[BaseIndexIndex];
+                                i32 IndexB = ImportedMesh->Indices[BaseIndexIndex+1];
+                                i32 IndexC = ImportedMesh->Indices[BaseIndexIndex+2];
+                                vec3 A = InstanceTransform * ImportedMesh->VertexPositions[IndexA] + InstanceTranslation;
+                                vec3 B = InstanceTransform * ImportedMesh->VertexPositions[IndexB] + InstanceTranslation;
+                                vec3 C = InstanceTransform * ImportedMesh->VertexPositions[IndexC] + InstanceTranslation;
+
+                                b32 IsPlayerAndTriSeparated =
+                                    IsThereASeparatingAxisTriBox(A, B, C,
+                                                                 PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
+                                                                 PlayerAABB->Extents, AABoxAxes);
+
+                                if (!IsPlayerAndTriSeparated)
+                                {
+                                    CollisionNormal = VecNormalize(VecCross(B - A, C - B));
+                                    if (CollisionDebugData)
+                                    {
+                                        CollisionDebugData[InstanceIndex].IsColliding = true;
+                                        CollisionDebugData[InstanceIndex].CollisionTri[0] = A;
+                                        CollisionDebugData[InstanceIndex].CollisionTri[1] = B;
+                                        CollisionDebugData[InstanceIndex].CollisionTri[2] = C;
+                                        CollisionDebugData[InstanceIndex].CollisionTriIndex = TriangleIndex;
+                                    }
+                                }
+
+                                WillCollide |= !IsPlayerAndTriSeparated;
+                            }
+                        }
+                    } break;
+                
+                    case COLLISION_TYPE_BV_AABB:
+                    {
+                        Assert(Blueprint->BoundingVolume);
+                        aabb *AABB = &Blueprint->BoundingVolume->AABB;
+                        
+                        b32 SeparatingAxisFound = false;
+                        for (u32 AxisIndex = 0;
+                             AxisIndex < 3;
+                             ++AxisIndex)
+                        {
+                            f32 PlayerCenter = PlayerInstance->Position.E[AxisIndex] + PlayerTranslation.E[AxisIndex] + PlayerAABB->Center.E[AxisIndex];
+                            f32 PlayerMin = PlayerCenter - PlayerAABB->Extents.E[AxisIndex];
+                            f32 PlayerMax = PlayerCenter + PlayerAABB->Extents.E[AxisIndex];
+
+                            f32 OtherCenter = Instance->Position.E[AxisIndex] + AABB->Center.E[AxisIndex];
+                            f32 OtherMin = OtherCenter - AABB->Extents.E[AxisIndex];
+                            f32 OtherMax = OtherCenter + AABB->Extents.E[AxisIndex];
+
+                            f32 PositiveAxisPenetratingDistance = OtherMax - PlayerMin;
+                            f32 NegativeAxisPenetratingDistance = PlayerMax - OtherMin;
+
+                            b32 NegativeAxisIsShortest = (NegativeAxisPenetratingDistance < PositiveAxisPenetratingDistance);
+                            f32 PenetratingDistance = (NegativeAxisIsShortest ?
+                                                       NegativeAxisPenetratingDistance : PositiveAxisPenetratingDistance);
+
+                            if (PenetratingDistance < 0.0f)
+                            {
+                                SeparatingAxisFound = true;
+                                break;
                             }
 
-                            WillCollide |= !IsPlayerAndTriSeparated;
+                            if (PenetratingDistance < ShortestPenetratingDistance)
+                            {
+                                ShortestPenetratingDistance = PenetratingDistance;
+                                ShortestPenetratingAxis = AxisIndex;
+                                ShortestAxisShouldBeInverted = NegativeAxisIsShortest;
+                            }
                         }
-                    }
-                } break;
-                
-                case COLLISION_TYPE_BV_AABB:
-                {
-                    Assert(Blueprint->BoundingVolume);
-                    aabb *AABB = &Blueprint->BoundingVolume->AABB;
-                        
-                    b32 SeparatingAxisFound = false;
-                    for (u32 AxisIndex = 0;
-                         AxisIndex < 3;
-                         ++AxisIndex)
-                    {
-                        f32 PlayerCenter = PlayerDesiredPosition.E[AxisIndex] + PlayerAABB->Center.E[AxisIndex];
-                        f32 PlayerMin = PlayerCenter - PlayerAABB->Extents.E[AxisIndex];
-                        f32 PlayerMax = PlayerCenter + PlayerAABB->Extents.E[AxisIndex];
 
-                        f32 OtherCenter = Instance->Position.E[AxisIndex] + AABB->Center.E[AxisIndex];
-                        f32 OtherMin = OtherCenter - AABB->Extents.E[AxisIndex];
-                        f32 OtherMax = OtherCenter + AABB->Extents.E[AxisIndex];
+                        WillCollide |= !SeparatingAxisFound;
 
-                        if (PlayerMax < OtherMin || PlayerMin > OtherMax)
+                        if (CollisionDebugData)
                         {
-                            SeparatingAxisFound = true;
-                            break;
+                            CollisionDebugData[InstanceIndex].IsColliding = !SeparatingAxisFound;
+                            CollisionDebugData[InstanceIndex].BoxCenter = Instance->Position + AABB->Center;
+                            CollisionDebugData[InstanceIndex].BoxExtents = AABB->Extents;
                         }
-                    }
+                    } break;
 
-                    WillCollide |= !SeparatingAxisFound;
-
-                    if (CollisionDebugData)
+                    default:
                     {
-                        CollisionDebugData[InstanceIndex].IsColliding = !SeparatingAxisFound;
-                        CollisionDebugData[InstanceIndex].BoxCenter = Instance->Position + AABB->Center;
-                        CollisionDebugData[InstanceIndex].BoxExtents = AABB->Extents;
-                    }
-                
-                } break;
-
-                default:
-                {
-                    InvalidCodePath;
-                } break;
+                        InvalidCodePath;
+                    } break;
+                }
             }
         }
+
+        // TODO: Make ignore collisions skip the whole collision check
+        if (!WillCollide || IgnoreCollisions)
+        {
+            break;
+        }
+#if 1
+        else if (WillCollide)
+        {
+            PlayerDidCollide |= true;
+            CollisionNormal = {};
+            CollisionNormal.E[ShortestPenetratingAxis] = ShortestAxisShouldBeInverted ? -1.0f : 1.0f;
+
+            f32 PlayerTranslationLength = VecLength(PlayerTranslation);
+            PlayerTranslation += PlayerTranslationLength * CollisionNormal;
+
+            DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, PlayerInstance->Position, PlayerInstance->Position + CollisionNormal, Vec3(1));
+        }
+#endif
     }
 
-    if (!WillCollide || IgnoreCollisions)
-    {
-        PlayerInstance->Position = PlayerDesiredPosition;
-    }
+    PlayerInstance->Position += PlayerTranslation;
+
     SetThirdPersonCameraTarget(&GameState->Camera, PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0));
-    
+
+    //
+    // NOTE: Mouse picking
+    //
     vec3 CameraFront = -VecSphericalToCartesian(GameState->Camera.Theta, GameState->Camera.Phi);
 
     vec3 RayPosition = GameState->Camera.Position;
@@ -895,7 +939,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
                 case COLLISION_TYPE_NONE_MOUSE:
                 case COLLISION_TYPE_MESH:
-                case COLLISION_TYPE_BV_AABB:
                 {
                     imported_model *ImportedModel = Blueprint->ImportedModel;
 
@@ -930,6 +973,47 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     {
                         imported_mesh *ImportedMesh = ImportedModel->Meshes + ImportedMeshIndex;
 
+                        vec3 *Vertices = ImportedMesh->VertexPositions;
+                        u32 VertexCount = ImportedMesh->VertexCount;
+
+                        if (BoneTransforms)
+                        {
+                            vec3 *AnimationTransformedVertices =
+                                MemoryArena_PushArrayAndZero(&GameState->TransientArena, VertexCount, vec3);
+                            
+                            for (u32 VertexIndex = 0;
+                                 VertexIndex < VertexCount;
+                                 ++VertexIndex)
+                            {
+                                vert_bone_ids *VertBoneIDs = ImportedMesh->VertexBoneIDs + VertexIndex;
+                                vert_bone_weights *VertBoneWeights = ImportedMesh->VertexBoneWeights + VertexIndex;
+
+                                vec4 Vertex = Vec4(Vertices[VertexIndex], 1);
+                                vec3 *AnimationTransformedVertex = AnimationTransformedVertices + VertexIndex;
+
+                                b32 FoundBoneForVert = false;
+                                f32 TotalWeight = 0.0f;
+                                for (u32 BoneIndex = 0;
+                                     BoneIndex < MAX_BONES_PER_VERTEX;
+                                     ++BoneIndex)
+                                {
+                                    u32 BoneID = VertBoneIDs->D[BoneIndex];
+                                    if (BoneID > 0)
+                                    {
+                                        mat4 *BoneTransform = BoneTransforms + BoneID;
+                                        f32 BoneWeight = VertBoneWeights->D[BoneIndex];
+                                        (*AnimationTransformedVertex) += BoneWeight * Vec3((*BoneTransform) * Vertex);
+                                        TotalWeight += BoneWeight;
+                                        FoundBoneForVert = true;
+                                    }
+                                }
+                                Assert(TotalWeight >= 1 - FLT_EPSILON);
+                                Assert(FoundBoneForVert);
+                            }
+
+                            Vertices = AnimationTransformedVertices;
+                        }
+
                         u32 TriangleCount = ImportedMesh->IndexCount / 3;
                         Assert(ImportedMesh->IndexCount % 3 == 0);
 
@@ -941,55 +1025,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             i32 IndexA = ImportedMesh->Indices[BaseIndexIndex];
                             i32 IndexB = ImportedMesh->Indices[BaseIndexIndex+1];
                             i32 IndexC = ImportedMesh->Indices[BaseIndexIndex+2];
-#if 0
-                            vec3 A = InstanceTransform * ImportedMesh->VertexPositions[IndexA] + InstanceTranslation;
-                            vec3 B = InstanceTransform * ImportedMesh->VertexPositions[IndexB] + InstanceTranslation;
-                            vec3 C = InstanceTransform * ImportedMesh->VertexPositions[IndexC] + InstanceTranslation;
-#else
-                            vec3 A = ImportedMesh->VertexPositions[IndexA];
-                            vec3 B = ImportedMesh->VertexPositions[IndexB];
-                            vec3 C = ImportedMesh->VertexPositions[IndexC];
-#endif
-
-                            if (BoneTransforms)
-                            {
-                                i32 Inds[] = { IndexA, IndexB, IndexC };
-                                vec3 *Verts[] = { &A, &B, &C };
-                                for (u32 VertIndex = 0;
-                                     VertIndex < 3;
-                                     ++VertIndex)
-                                {
-                                    vert_bone_ids *VertBoneIDs = ImportedMesh->VertexBoneIDs + Inds[VertIndex];
-                                    vert_bone_weights *VertBoneWeights = ImportedMesh->VertexBoneWeights + Inds[VertIndex];
-
-                                    vec3 *Vert = Verts[VertIndex];
-                                    vec4 RestVert = Vec4(*Vert, 1);
-                                    *Vert = {};
-
-                                    b32 FoundBoneForVert = false;
-                                    f32 TotalWeight = 0.0f;
-                                    for (u32 BoneIndex = 0;
-                                         BoneIndex < MAX_BONES_PER_VERTEX;
-                                         ++BoneIndex)
-                                    {
-                                        u32 BoneID = VertBoneIDs->D[BoneIndex];
-                                        if (BoneID > 0)
-                                        {
-                                            mat4 *BoneTransform = BoneTransforms + BoneID;
-                                            f32 BoneWeight = VertBoneWeights->D[BoneIndex];
-                                            (*Vert) += BoneWeight * Vec3((*BoneTransform) * RestVert);
-                                            TotalWeight += BoneWeight;
-                                            FoundBoneForVert = true;
-                                        }
-                                    }
-                                    Assert(TotalWeight >= 1 - FLT_EPSILON);
-                                    Assert(FoundBoneForVert);
-                                }
-                            }
-
-                            A = InstanceTransform * A + InstanceTranslation;
-                            B = InstanceTransform * B + InstanceTranslation;
-                            C = InstanceTransform * C + InstanceTranslation;
+                            vec3 A = InstanceTransform * Vertices[IndexA] + InstanceTranslation;
+                            vec3 B = InstanceTransform * Vertices[IndexB] + InstanceTranslation;
+                            vec3 C = InstanceTransform * Vertices[IndexC] + InstanceTranslation;
                             
                             // TODO: Cast a ray against triangle
                             f32 ThisTMin;
@@ -1012,7 +1050,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     }
                 } break;
                 
-#if 0
                 case COLLISION_TYPE_BV_AABB:
                 {
                     Assert(Blueprint->BoundingVolume);
@@ -1029,7 +1066,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                         ClosestIsTriangle = false;
                     }
                 } break;
-#endif
 
                 default:
                 {
@@ -1065,7 +1101,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     if (GameState->DebugCollisions)
     {
         ImmText_DrawQuickString(SimpleStringF("Triangles checked %llu", TrianglesChecked).D);
-        CollisionDebugData[GameState->PlayerWorldInstanceID].IsColliding = WillCollide;
+        CollisionDebugData[GameState->PlayerWorldInstanceID].IsColliding = PlayerDidCollide;
         CollisionDebugData[GameState->PlayerWorldInstanceID].BoxExtents = PlayerAABB->Extents;
         CollisionDebugData[GameState->PlayerWorldInstanceID].BoxCenter = PlayerInstance->Position + PlayerAABB->Center;
         
@@ -1086,7 +1122,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
                 case COLLISION_TYPE_NONE_MOUSE:
                 case COLLISION_TYPE_MESH:
-                case COLLISION_TYPE_BV_AABB:
                 {
                     if (CollisionDebug->IsColliding)
                     {
@@ -1105,7 +1140,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     }
                 } break;
 
-#if 0
                 case COLLISION_TYPE_BV_AABB:
                 {
                     vec3 BoxColor = (CollisionDebug->IsHighlighted ? Vec3(0,0,1) :
@@ -1118,7 +1152,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                                               InstanceIndex).D);
                     }
                 } break;
-#endif
 
                 default:
                 {
@@ -1162,8 +1195,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     
     OpenGL_SetUniformVec3F(GameState->StaticRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->Camera.Position, true);
     OpenGL_SetUniformVec3F(GameState->SkinnedRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->Camera.Position, true);
-
-    GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
     
     //
     // NOTE: Render
