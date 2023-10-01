@@ -39,7 +39,25 @@ IsSeparatingAxisTriBox(vec3 TestAxis, vec3 A, vec3 B, vec3 C, vec3 BoxExtents, v
 }
 
 internal inline b32
-IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes)
+DoesBoxIntersectPlane(vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 PlaneNormal, f32 PlaneDistance, f32 *Out_PenetrationDistance)
+{
+    f32 BoxRProjTowardsPlane = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], PlaneNormal)) +
+                                BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], PlaneNormal)) +
+                                BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], PlaneNormal)));
+
+    f32 PlaneProjFromBoxC = VecDot(PlaneNormal, BoxCenter) - PlaneDistance;
+
+    if (AbsF(PlaneProjFromBoxC) <= BoxRProjTowardsPlane)
+    {
+        if (Out_PenetrationDistance) *Out_PenetrationDistance = BoxRProjTowardsPlane - PlaneProjFromBoxC;
+        return true;
+    }
+    
+    return false;
+}
+
+internal inline b32
+IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 *Out_CollisionNormal, f32 *Out_PenetrationDepth)
 {
     // NOTE: Translate triangle as conceptually moving AABB to origin
     A -= BoxCenter;
@@ -89,11 +107,18 @@ IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExt
     //
     // NOTE: Test triangle's normal (category 2)
     //
-    vec3 TriNormal = VecCross(AB, BC);
-    if (!IsZeroVector(TriNormal) && IsSeparatingAxisTriBox(TriNormal, A, B, C, BoxExtents, BoxAxes))
+    vec3 TriNormal = VecNormalize(VecCross(AB, BC));
+    if (!IsZeroVector(TriNormal))
     {
-        return true;
+        f32 TriPlaneDistance = VecDot(TriNormal, A);
+        if (!DoesBoxIntersectPlane(Vec3(), BoxExtents, BoxAxes, TriNormal, TriPlaneDistance, Out_PenetrationDepth))
+        {
+            return true;
+        }
     }
+
+    // NOTE: As all triangles are part of closed meshes, should be ok to always use the tri normal as the collision normal
+    if (Out_CollisionNormal) *Out_CollisionNormal = VecNormalize(TriNormal);
 
     return false;
 }
@@ -546,7 +571,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
             world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f), 0 },
             world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(Vec3(0,1,0), ToRadiansF(45.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 }
+            world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 },
+            world_object_instance { 4, Vec3(-3.0f, 0.0f, 3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
         };
 
 
@@ -754,11 +780,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
          IterationIndex < CollisionIterations;
          ++IterationIndex)
     {
-        f32 ShortestPenetratingDistance = FLT_MAX;
-        u32 ShortestPenetratingAxis = 0;
-        b32 ShortestAxisShouldBeInverted = false;
+        f32 ShortestPenetrationDepth = FLT_MAX;
         vec3 CollisionNormal = {};
+        
         b32 WillCollide = false;
+        
         for (u32 InstanceIndex = 1;
              InstanceIndex < GameState->WorldObjectInstanceCount;
              ++InstanceIndex)
@@ -803,25 +829,33 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                 vec3 B = InstanceTransform * ImportedMesh->VertexPositions[IndexB] + InstanceTranslation;
                                 vec3 C = InstanceTransform * ImportedMesh->VertexPositions[IndexC] + InstanceTranslation;
 
+                                vec3 ThisCollisionNormal;
+                                f32 ThisPenetrationDepth;
                                 b32 IsPlayerAndTriSeparated =
                                     IsThereASeparatingAxisTriBox(A, B, C,
                                                                  PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
-                                                                 PlayerAABB->Extents, AABoxAxes);
+                                                                 PlayerAABB->Extents, AABoxAxes, &ThisCollisionNormal, &ThisPenetrationDepth);
 
                                 if (!IsPlayerAndTriSeparated)
                                 {
-                                    CollisionNormal = VecNormalize(VecCross(B - A, C - B));
-                                    if (CollisionDebugData)
+                                    if (ThisPenetrationDepth < ShortestPenetrationDepth)
                                     {
-                                        CollisionDebugData[InstanceIndex].IsColliding = true;
-                                        CollisionDebugData[InstanceIndex].CollisionTri[0] = A;
-                                        CollisionDebugData[InstanceIndex].CollisionTri[1] = B;
-                                        CollisionDebugData[InstanceIndex].CollisionTri[2] = C;
-                                        CollisionDebugData[InstanceIndex].CollisionTriIndex = TriangleIndex;
+                                        ShortestPenetrationDepth  = ThisPenetrationDepth;
+                                        CollisionNormal = ThisCollisionNormal;
                                     }
                                 }
 
                                 WillCollide |= !IsPlayerAndTriSeparated;
+                                
+                                if (CollisionDebugData)
+                                {
+                                    CollisionDebugData[InstanceIndex].IsColliding = !IsPlayerAndTriSeparated;
+                                    CollisionDebugData[InstanceIndex].CollisionTri[0] = A;
+                                    CollisionDebugData[InstanceIndex].CollisionTri[1] = B;
+                                    CollisionDebugData[InstanceIndex].CollisionTri[2] = C;
+                                    CollisionDebugData[InstanceIndex].CollisionTriIndex = TriangleIndex;
+                                }
+
                             }
                         }
                     } break;
@@ -830,6 +864,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     {
                         Assert(Blueprint->BoundingVolume);
                         aabb *AABB = &Blueprint->BoundingVolume->AABB;
+
+                        f32 ThisPenetrationDepth = FLT_MAX;
+                        vec3 ThisCollisionNormal = {};
+                        
+                        if (GameInput->CurrentKeyStates[SDL_SCANCODE_B])
+                        {
+                            Noop;
+                        }
                         
                         b32 SeparatingAxisFound = false;
                         for (u32 AxisIndex = 0;
@@ -844,24 +886,33 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             f32 OtherMin = OtherCenter - AABB->Extents.E[AxisIndex];
                             f32 OtherMax = OtherCenter + AABB->Extents.E[AxisIndex];
 
-                            f32 PositiveAxisPenetratingDistance = OtherMax - PlayerMin;
-                            f32 NegativeAxisPenetratingDistance = PlayerMax - OtherMin;
+                            f32 PositiveAxisPenetrationDepth = OtherMax - PlayerMin;
+                            f32 NegativeAxisPenetrationDepth = PlayerMax - OtherMin;
 
-                            b32 NegativeAxisIsShortest = (NegativeAxisPenetratingDistance < PositiveAxisPenetratingDistance);
-                            f32 PenetratingDistance = (NegativeAxisIsShortest ?
-                                                       NegativeAxisPenetratingDistance : PositiveAxisPenetratingDistance);
+                            b32 NegativeAxisIsShortest = (NegativeAxisPenetrationDepth < PositiveAxisPenetrationDepth);
+                            f32 AxisPenetrationDepth = (NegativeAxisIsShortest ?
+                                                        NegativeAxisPenetrationDepth : PositiveAxisPenetrationDepth);
 
-                            if (PenetratingDistance < 0.0f)
+                            if (AxisPenetrationDepth < 0.0f)
                             {
                                 SeparatingAxisFound = true;
                                 break;
                             }
 
-                            if (PenetratingDistance < ShortestPenetratingDistance)
+                            if (AxisPenetrationDepth < ThisPenetrationDepth)
                             {
-                                ShortestPenetratingDistance = PenetratingDistance;
-                                ShortestPenetratingAxis = AxisIndex;
-                                ShortestAxisShouldBeInverted = NegativeAxisIsShortest;
+                                ThisPenetrationDepth = AxisPenetrationDepth;
+                                ThisCollisionNormal = Vec3();
+                                ThisCollisionNormal.E[AxisIndex] = NegativeAxisIsShortest ? -1.0f : 1.0f;
+                            }
+                        }
+
+                        if (!SeparatingAxisFound)
+                        {
+                            if (ThisPenetrationDepth < ShortestPenetrationDepth)
+                            {
+                                ShortestPenetrationDepth = ThisPenetrationDepth;
+                                CollisionNormal = ThisCollisionNormal;
                             }
                         }
 
@@ -883,6 +934,22 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             }
         }
 
+        // TODO: Keep track of up to 4 collisions each iteration, then choose one of those to be the collision
+        // solved in this iteration. Take each of the 4 collisions, and calculate: if we resolve that collision, what is the resulting
+        // greatest collision depth on the others of the 4 collisions. Pick the collision with the least resulting greatest collision depth.
+        // If we keep track of collision normals and penetration depths of all 4 of those collisions, we can project onto them, and see
+        // the resulting penetration after solving one of those collisions, without having to recalculate all of the collisions.
+        // Each collision has to be for one convex polyhedron. Pick the collision for that convex polyhedron the way it's already done:
+        // The normal with the shortest penetration. If the polyhedron is indeed convex, that will definitely resolve the collision with
+        // that polyhedron.
+        // That means, that if a mesh is concave, it has to be split into separate convex meshes, or a convex hull has to made around it.
+        // If the shortest penetration method is applied to a mesh that is concave, some collisions with some surfaces will be missed, and
+        // the geometry will go through that triangle. On the other hand, if each triangle is treated as a convex mesh to collide against,
+        // and we store each collision with each triangle separately, we will run into the same problem as we already have with AABBs.
+        // And it's possible to get stuck, even though with a different order of resolution, we could... Wait ????????????? Maybe the latter
+        // is possible, look into it later. But it will mean that we will saturate that limit of 4 collisions per iteration very easily.
+        // Nvm this probably won't work. Solving 
+
         // TODO: Make ignore collisions skip the whole collision check
         if (!WillCollide || IgnoreCollisions)
         {
@@ -892,13 +959,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         else if (WillCollide)
         {
             PlayerDidCollide |= true;
-            CollisionNormal = {};
-            CollisionNormal.E[ShortestPenetratingAxis] = ShortestAxisShouldBeInverted ? -1.0f : 1.0f;
 
-            f32 PlayerTranslationLength = VecLength(PlayerTranslation);
-            PlayerTranslation += PlayerTranslationLength * CollisionNormal;
+            // vec3 CollidingComponent = VecDot(PlayerTranslation, CollisionNormal) * CollisionNormal;
+            // PlayerTranslation -= CollidingComponent;
+            vec3 CollidingComponent = AbsF(VecDot(PlayerTranslation, CollisionNormal)) * CollisionNormal;
+            PlayerTranslation += CollidingComponent;
 
-            DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, PlayerInstance->Position, PlayerInstance->Position + CollisionNormal, Vec3(1));
+            DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, PlayerInstance->Position, PlayerInstance->Position + CollisionNormal, Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
         }
 #endif
     }
@@ -906,6 +973,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     PlayerInstance->Position += PlayerTranslation;
 
     SetThirdPersonCameraTarget(&GameState->Camera, PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0));
+
 
     //
     // NOTE: Mouse picking
