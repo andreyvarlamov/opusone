@@ -1,3 +1,6 @@
+#ifndef OPUSONE_DEBUG_DRAW_CPP
+#define OPUSONE_DEBUG_DRAW_CPP
+
 #include "opusone_common.h"
 #include "opusone_linmath.h"
 #include "opusone_render.h"
@@ -198,3 +201,5 @@ DD_PushTriangle(render_unit *RenderUnit, vec3 A, vec3 B, vec3 C, vec3 Color)
 
     SubVertexDataForRenderUnit(RenderUnit, AttribData, AttribCount, Indices, VertexCount, IndexCount);
 }
+
+#endif

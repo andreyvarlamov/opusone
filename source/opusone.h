@@ -84,6 +84,7 @@ struct game_state
     
     camera Camera;
     b32 ForceFirstPersonTemp;
+    b32 MouseControlledTemp;
 
     render_unit StaticRenderUnit;
     render_unit SkinnedRenderUnit;

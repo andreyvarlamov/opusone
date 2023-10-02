@@ -29,10 +29,10 @@ main(int Argc, char *Argv[])
     Assert(MainContext);
 
     gladLoadGLLoader(SDL_GL_GetProcAddress);
-    printf("OpenGL loaded\n");
-    printf("Vendor: %s\n", glGetString(GL_VENDOR));
-    printf("Renderer: %s\n", glGetString(GL_RENDERER));
-    printf("Version: %s\n", glGetString(GL_VERSION));
+    printf("PLATFORM: OpenGL loaded\n");
+    printf("PLATFORM: Vendor: %s\n", glGetString(GL_VENDOR));
+    printf("PLATFORM: Renderer: %s\n", glGetString(GL_RENDERER));
+    printf("PLATFORM: Version: %s\n", glGetString(GL_VERSION));
 
     i32 SDLImageFlags = IMG_INIT_JPG | IMG_INIT_PNG;
     b32 IMGInitResult = IMG_Init(SDLImageFlags);
@@ -51,11 +51,15 @@ main(int Argc, char *Argv[])
     GameInput.OriginalScreenWidth = GameInput.ScreenWidth;
     GameInput.OriginalScreenHeight = GameInput.ScreenHeight;
     glViewport(0, 0, GameInput.ScreenWidth, GameInput.ScreenHeight);
+    printf("PLATFORM: Original Screen Resolution: %d x %d\n", GameInput.OriginalScreenWidth, GameInput.OriginalScreenHeight);
 
-    f32 MonitorRefreshRate = 164.386f; // Hardcode from my display settings for now
-    // f32 MonitorRefreshRate = 60.f; // Hardcode from my display settings for now
-    // f32 MonitorRefreshRate = 30.f; // Hardcode from my display settings for now
-    GameInput.DeltaTime = 1.0f / MonitorRefreshRate;
+    f32 ExpectedRefreshRates[] = { 164.386f, 60.0f, 30.0f }; // Hardcode from my display settings for now
+    u32 ExpectedRefreshRateCount = ArrayCount(ExpectedRefreshRates);
+    
+    u32 CurrentExpectedRefreshRate = 0;
+    GameInput.DeltaTime = 1.0f / ExpectedRefreshRates[CurrentExpectedRefreshRate];
+    printf("PLATFORM: Expected refresh rate: %0.3f fps [DT=%0.6f]\n",
+           ExpectedRefreshRates[CurrentExpectedRefreshRate], GameInput.DeltaTime);
 
     u64 PerfCounterFrequency = SDL_GetPerformanceFrequency();
     u64 LastCounter = SDL_GetPerformanceCounter();
@@ -81,6 +85,7 @@ main(int Argc, char *Argv[])
                         GameInput.ScreenWidth = SDLEvent.window.data1;
                         GameInput.ScreenHeight = SDLEvent.window.data2;
                         glViewport(0, 0, GameInput.ScreenWidth, GameInput.ScreenHeight);
+                        printf("PLATFORM: Window resized. New resolution: %d x %d\n", GameInput.ScreenWidth, GameInput.ScreenHeight);
                     }
                 } break;
             }
@@ -92,6 +97,20 @@ main(int Argc, char *Argv[])
         GameInput.MouseButtonState[0] = (SDL_BUTTON(1) & SDLMouseButtonState); // Left mouse button
         GameInput.MouseButtonState[1] = (SDL_BUTTON(2) & SDLMouseButtonState); // Middle mouse button
         GameInput.MouseButtonState[2] = (SDL_BUTTON(3) & SDLMouseButtonState); // Right mouse button
+
+        if (GameInput.CurrentKeyStates[SDL_SCANCODE_F11] && !GameInput.KeyWasDown[SDL_SCANCODE_F11])
+        {
+            CurrentExpectedRefreshRate = (CurrentExpectedRefreshRate + 1) % ExpectedRefreshRateCount;
+            GameInput.DeltaTime = 1.0f / ExpectedRefreshRates[CurrentExpectedRefreshRate];
+            printf("PLATFORM: Expected refresh rate: %0.3f fps [DT=%0.6f]\n",
+                   ExpectedRefreshRates[CurrentExpectedRefreshRate], GameInput.DeltaTime);
+            
+            GameInput.KeyWasDown[SDL_SCANCODE_F11] = true;
+        }
+        else if (!GameInput.CurrentKeyStates[SDL_SCANCODE_F11])
+        {
+            GameInput.KeyWasDown[SDL_SCANCODE_F11] = false;
+        }
 
         GameUpdateAndRender(&GameInput, &GameMemory, &ShouldQuit);
 
