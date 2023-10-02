@@ -536,8 +536,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
     world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
     world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
-    
-    PlayerInstance->Rotation *= Quat(Vec3(0,1,0), ToRadiansF(CameraDeltaTheta));
+
+    if (!GameInput->CurrentKeyStates[SDL_SCANCODE_TAB] && !GameInput->MouseButtonState[1])
+    {
+        PlayerInstance->Rotation = Quat(Vec3(0,1,0), ToRadiansF(GameState->Camera.Theta + 180.0f));
+    }
     vec3 PlayerTranslation = Vec3();
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_W])
     {
@@ -575,23 +578,50 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     aabb *PlayerAABB = &PlayerBlueprint->BoundingVolume->AABB;
     vec3 AABoxAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
 
-    struct collision_debug_data
+    enum collision_debug_state
     {
-        b32 IsColliding;
-        b32 IsHighlighted;
-        vec3 BoxCenter;
-        vec3 BoxExtents;
-        vec3 CollisionTri[3];
-        u32 CollisionTriIndex;
-        vec3 HighlightedTri[3];
-        u32 HighlightedTriIndex;
+        COLLISION_DEBUG_NONE,
+        COLLISION_DEBUG_PICKED,
+        COLLISION_DEBUG_COLLIDED
     };
 
-    collision_debug_data *CollisionDebugData = 0;
+    enum collision_debug_type
+    {
+        COLLISION_DEBUG_BOX,
+        COLLISION_DEBUG_TRI
+    };
+    
+    struct collision_debug_entry
+    {
+        u32 InstanceIndex;
+        collision_debug_state State;
+
+        collision_debug_type T;
+        union
+        {
+            struct
+            {
+                vec3 BoxCenter;
+                vec3 BoxExtents;
+            };
+
+            struct
+            {
+                u32 MeshIndex;
+                u32 TriIndex;
+                vec3 Tri[3];
+            };
+        } D;
+    };
+
+    collision_debug_entry *CollisionDebugEntries = 0;
+    u32 MaxCollisionDebugEntries = 0;
+    u32 CurrentCollisionDebugEntry = 0;
     if (GameState->DebugCollisions)
     {
-        CollisionDebugData =
-            MemoryArena_PushArrayAndZero(&GameState->TransientArena, GameState->WorldObjectInstanceCount, collision_debug_data);
+        MaxCollisionDebugEntries = 4096;
+        CollisionDebugEntries =
+            MemoryArena_PushArray(&GameState->TransientArena, MaxCollisionDebugEntries, collision_debug_entry);
     }
 
     vec3 TestA = Vec3(3, .5f, 15);
@@ -678,15 +708,24 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                     TranslationWillWorsenACollision = true;
                                 }
                                 
-                                if (CollisionDebugData)
+                                if (CollisionDebugEntries)
                                 {
-                                    CollisionDebugData[InstanceIndex].IsColliding = !IsPlayerAndTriSeparated;
-                                    CollisionDebugData[InstanceIndex].CollisionTri[0] = A;
-                                    CollisionDebugData[InstanceIndex].CollisionTri[1] = B;
-                                    CollisionDebugData[InstanceIndex].CollisionTri[2] = C;
-                                    CollisionDebugData[InstanceIndex].CollisionTriIndex = TriangleIndex;
-                                }
+                                    collision_debug_entry *Entry = CollisionDebugEntries + CurrentCollisionDebugEntry++;
+                                    *Entry = {};
 
+                                    if (!IsPlayerAndTriSeparated)
+                                    {
+                                        Entry->State = COLLISION_DEBUG_COLLIDED;
+                                    }
+                                    Entry->InstanceIndex = InstanceIndex;
+                                    Entry->T = COLLISION_DEBUG_TRI;
+                                    
+                                    Entry->D.MeshIndex = ImportedMeshIndex;
+                                    Entry->D.TriIndex = TriangleIndex;
+                                    Entry->D.Tri[0] = A;
+                                    Entry->D.Tri[1] = B;
+                                    Entry->D.Tri[2] = C;
+                                }
                             }
                         }
                     } break;
@@ -742,11 +781,20 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             TranslationWillWorsenACollision = true;
                         }
 
-                        if (CollisionDebugData)
+                        if (CollisionDebugEntries)
                         {
-                            CollisionDebugData[InstanceIndex].IsColliding = !SeparatingAxisFound;
-                            CollisionDebugData[InstanceIndex].BoxCenter = Instance->Position + AABB->Center;
-                            CollisionDebugData[InstanceIndex].BoxExtents = AABB->Extents;
+                            collision_debug_entry *Entry = CollisionDebugEntries + CurrentCollisionDebugEntry++;
+                            *Entry = {};
+
+                            if (!SeparatingAxisFound)
+                            {
+                                Entry->State = COLLISION_DEBUG_COLLIDED;
+                            }
+                            Entry->InstanceIndex = InstanceIndex;
+                            Entry->T = COLLISION_DEBUG_BOX;
+                                    
+                            Entry->D.BoxCenter = Instance->Position + AABB->Center;
+                            Entry->D.BoxExtents = AABB->Extents;
                         }
                     } break;
 
@@ -849,10 +897,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     vec3 RayDirection = VecNormalize(CameraFront);
     f32 RayTMin = FLT_MAX;
     u32 ClosestInstanceIndex = 0;
+    u32 ClosestMeshIndex = 0;
     u32 ClosestTriangleIndex = 0;
     b32 ClosestIsTriangle = false;
     vec3 ClosestTriVerts[3] = {};
-
+    vec3 ClosestBoxCenter = {};
+    vec3 ClosestBoxExtents = {};
+    
     u64 TrianglesChecked = 0;
     for (u32 InstanceIndex = 1;
          InstanceIndex < GameState->WorldObjectInstanceCount;
@@ -971,6 +1022,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             {
                                 RayTMin = ThisTMin;
                                 ClosestInstanceIndex = InstanceIndex;
+                                ClosestMeshIndex = ImportedMeshIndex;
                                 ClosestTriangleIndex = TriangleIndex;
                                 ClosestIsTriangle = true;
                                 ClosestTriVerts[0] = A;
@@ -997,6 +1049,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                         RayTMin = ThisTMin;
                         ClosestInstanceIndex = InstanceIndex;
                         ClosestIsTriangle = false;
+                        ClosestBoxCenter = AABB->Center;
+                        ClosestBoxExtents = AABB->Extents;
                     }
                 } break;
 
@@ -1010,20 +1064,43 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
     if (ClosestInstanceIndex > 0)
     {
-        if (CollisionDebugData) CollisionDebugData[ClosestInstanceIndex].IsHighlighted = true;
-        
+        if (CollisionDebugEntries)
+        {
+            if (ClosestIsTriangle)
+            {
+                collision_debug_entry *Entry = CollisionDebugEntries;
+                for (u32 EntryIndex = 0;
+                     EntryIndex < CurrentCollisionDebugEntry;
+                     ++EntryIndex, ++Entry)
+                {
+                    if (Entry->InstanceIndex == ClosestInstanceIndex &&
+                        Entry->T == COLLISION_DEBUG_TRI &&
+                        Entry->D.MeshIndex == ClosestMeshIndex &&
+                        Entry->D.TriIndex == ClosestTriangleIndex)
+                    {
+                        if (Entry->State != COLLISION_DEBUG_COLLIDED) Entry->State = COLLISION_DEBUG_PICKED;
+                    }
+                }
+            }
+            else
+            {
+                collision_debug_entry *Entry = CollisionDebugEntries;
+                for (u32 EntryIndex = 0;
+                     EntryIndex < CurrentCollisionDebugEntry;
+                     ++EntryIndex, ++Entry)
+                {
+                    if (Entry->InstanceIndex == ClosestInstanceIndex)
+                    {
+                        if (Entry->State != COLLISION_DEBUG_COLLIDED) Entry->State = COLLISION_DEBUG_PICKED;
+                    }
+                }
+            }
+        }
+
         if (ClosestIsTriangle)
         {
-            if (CollisionDebugData)
-            {
-                CollisionDebugData[ClosestInstanceIndex].HighlightedTri[0] = ClosestTriVerts[0];
-                CollisionDebugData[ClosestInstanceIndex].HighlightedTri[1] = ClosestTriVerts[1];
-                CollisionDebugData[ClosestInstanceIndex].HighlightedTri[2] = ClosestTriVerts[2];
-                CollisionDebugData[ClosestInstanceIndex].HighlightedTriIndex = ClosestTriangleIndex;
-            }
-            
-            ImmText_DrawQuickString(SimpleStringF("Looking at inst#%d [tri#%d]",
-                                                  ClosestInstanceIndex, ClosestTriangleIndex).D);
+            ImmText_DrawQuickString(SimpleStringF("Looking at inst#%d [mesh#%d;tri#%d]",
+                                                  ClosestInstanceIndex, ClosestMeshIndex, ClosestTriangleIndex).D);
         }
         else
         {
@@ -1031,73 +1108,118 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 
+    //
+    // NOTE: Draw debug collisions if enabled
+    //
     if (GameState->DebugCollisions)
     {
-        ImmText_DrawQuickString(SimpleStringF("Triangles checked %llu", TrianglesChecked).D);
-        CollisionDebugData[GameState->PlayerWorldInstanceID].IsColliding = PlayerTranslationWasAdjusted || !TranslationIsSafe;
-        CollisionDebugData[GameState->PlayerWorldInstanceID].BoxExtents = PlayerAABB->Extents;
-        CollisionDebugData[GameState->PlayerWorldInstanceID].BoxCenter = PlayerInstance->Position + PlayerAABB->Center;
+        ImmText_DrawQuickString(SimpleStringF("Triangles checked for mouse picking %llu", TrianglesChecked).D);
         
-        for (u32 InstanceIndex = 1;
-             InstanceIndex < GameState->WorldObjectInstanceCount;
-             ++InstanceIndex)
+        // NOTE: Add player's collision box
         {
-            world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
-            world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
-            collision_debug_data *CollisionDebug = CollisionDebugData + InstanceIndex;
+            collision_debug_entry *Entry = CollisionDebugEntries + CurrentCollisionDebugEntry++;
+            Entry->InstanceIndex = GameState->PlayerWorldInstanceID;
+            Entry->State = ((PlayerTranslationWasAdjusted || !TranslationIsSafe) ? COLLISION_DEBUG_COLLIDED : COLLISION_DEBUG_NONE);
+            Entry->T = COLLISION_DEBUG_BOX;
+            Entry->D.BoxCenter = PlayerInstance->Position + PlayerAABB->Center;
+            Entry->D.BoxExtents = PlayerAABB->Extents;
+        } 
 
-            switch (Blueprint->CollisionType)
+        collision_debug_entry *Entry = CollisionDebugEntries;
+        // NOTE: First only draw non-affected geometry
+        #if 1
+        for (u32 EntryIndex = 0;
+             EntryIndex < CurrentCollisionDebugEntry;
+             ++EntryIndex, ++Entry)
+        {
+            if (Entry->State == COLLISION_DEBUG_NONE)
             {
-                case COLLISION_TYPE_NONE:
+                vec3 Color = Vec3(0,1,0);
+            
+                switch (Entry->T)
                 {
-                    continue;
-                } break;
-
-                case COLLISION_TYPE_NONE_MOUSE:
-                case COLLISION_TYPE_MESH:
-                {
-                    if (CollisionDebug->IsColliding)
+                    case COLLISION_DEBUG_BOX:
                     {
-                        DD_PushTriangle(&GameState->DebugDrawRenderUnit,
-                                        CollisionDebug->CollisionTri[0], CollisionDebug->CollisionTri[1],
-                                        CollisionDebug->CollisionTri[2], Vec3(1,0,0));
-                        ImmText_DrawQuickString(SimpleStringF("Collision: inst#%d [tri#%d]",
-                                                              InstanceIndex, CollisionDebug->CollisionTriIndex).D);
-                    }
+                        DD_PushAABox(&GameState->DebugDrawRenderUnit, Entry->D.BoxCenter, Entry->D.BoxExtents, Color);
+                    } break;
 
-                    if (CollisionDebug->IsHighlighted)
+                    case COLLISION_DEBUG_TRI:
                     {
-                        DD_PushTriangle(&GameState->DebugDrawRenderUnit,
-                                        CollisionDebug->HighlightedTri[0], CollisionDebug->HighlightedTri[1],
-                                        CollisionDebug->HighlightedTri[2], Vec3(0,0,1));
-                    }
-                } break;
+                        DD_PushTriangle(&GameState->DebugDrawRenderUnit, Entry->D.Tri[0], Entry->D.Tri[1], Entry->D.Tri[2], Color);
+                    } break;
 
-                case COLLISION_TYPE_BV_AABB:
-                {
-                    vec3 BoxColor = (CollisionDebug->IsHighlighted ? Vec3(0,0,1) :
-                                     (CollisionDebug->IsColliding ? Vec3(1,0,0) : Vec3(1,1,0)));
-                    DD_PushAABox(&GameState->DebugDrawRenderUnit, CollisionDebug->BoxCenter, CollisionDebug->BoxExtents, BoxColor);
-
-                    if (CollisionDebug->IsColliding && InstanceIndex != GameState->PlayerWorldInstanceID)
+                    default:
                     {
-                        ImmText_DrawQuickString(SimpleStringF("Collision: inst#%d [aabb]",
-                                                              InstanceIndex).D);
-                    }
-                } break;
+                        InvalidCodePath;
+                    } break;
+                }
+            }
+        }
+        #endif
 
-                default:
+        // NOTE: Then draw picked/collided geometry (This is so piggy, just want to draw them in the right order quickly)
+        Entry = CollisionDebugEntries;
+        for (u32 EntryIndex = 0;
+             EntryIndex < CurrentCollisionDebugEntry;
+             ++EntryIndex, ++Entry)
+        {
+            if (Entry->State != COLLISION_DEBUG_NONE)
+            {
+                vec3 Color;
+                switch (Entry->State)
                 {
-                    InvalidCodePath;
-                } break;
-            }            
+                    case COLLISION_DEBUG_PICKED:
+                    {
+                        Color = Vec3(0,0,1);
+                    } break;
+
+                    case COLLISION_DEBUG_COLLIDED:
+                    {
+                        Color = Vec3(1,0,0);
+                    } break;
+
+                    default:
+                    {
+                        Color = Vec3(0,1,0);
+                    } break;
+                }
+            
+                switch (Entry->T)
+                {
+                    case COLLISION_DEBUG_BOX:
+                    {
+                        DD_PushAABox(&GameState->DebugDrawRenderUnit, Entry->D.BoxCenter, Entry->D.BoxExtents, Color);
+                        if (Entry->State == COLLISION_DEBUG_COLLIDED)
+                        {
+                            ImmText_DrawQuickString(SimpleStringF("Collision: inst#%d [aabb]", Entry->InstanceIndex).D);
+                        }
+                    } break;
+
+                    case COLLISION_DEBUG_TRI:
+                    {
+                        DD_PushTriangle(&GameState->DebugDrawRenderUnit, Entry->D.Tri[0], Entry->D.Tri[1], Entry->D.Tri[2], Color);
+                        if (Entry->State == COLLISION_DEBUG_COLLIDED)
+                        {
+                            ImmText_DrawQuickString(SimpleStringF("Collision: inst#%d [mesh#%d;tri#%d]",
+                                                                  Entry->InstanceIndex, Entry->D.MeshIndex, Entry->D.TriIndex).D);
+                        }
+                    } break;
+
+                    default:
+                    {
+                        InvalidCodePath;
+                    } break;
+                }
+            }
         }
     }
-    
+
+#if 0
     DD_PushCoordinateAxes(&GameState->DebugDrawRenderUnit,
                           Vec3(-7.5f, 0.0f, -7.5f),
                           Vec3(1.0f, 0.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f), Vec3(0.0f, 0.0f, 1.0f),
                           3.0f);
+#endif
 
     if (GameState->ForceFirstPersonTemp)
     {
