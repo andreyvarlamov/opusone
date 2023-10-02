@@ -15,27 +15,33 @@
 #include "opusone_debug_draw.cpp"
 
 internal inline b32
-IsSeparatingAxisTriBox(vec3 TestAxis, vec3 A, vec3 B, vec3 C, vec3 BoxExtents, vec3 *BoxAxes)
+IsSeparatingAxisTriBox(vec3 TestAxis, vec3 A, vec3 B, vec3 C, vec3 BoxExtents, vec3 *BoxAxes, f32 *Out_PenetrationDistance)
 {
     f32 AProj = VecDot(A, TestAxis);
     f32 BProj = VecDot(B, TestAxis);
     f32 CProj = VecDot(C, TestAxis);
-#if 0
+#if 1
     f32 MinTriProj = Min(Min(AProj, BProj), CProj);
     f32 MaxTriProj = Max(Max(AProj, BProj), CProj);
     f32 MaxBoxProj = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], TestAxis)) +
                       BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], TestAxis)) +
                       BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], TestAxis)));
     f32 MinBoxProj = -MaxBoxProj;
-    b32 Result = (MaxTriProj < MinBoxProj || MinTriProj > MaxBoxProj);
+    if (MaxTriProj < MinBoxProj || MinTriProj > MaxBoxProj)
+    {
+        return true;
+    }
+    
+    if (Out_PenetrationDistance) *Out_PenetrationDistance = Min(MaxBoxProj - MinTriProj, MaxTriProj - MinBoxProj);
+    return false;
 #else
     f32 BoxRProj = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], TestAxis)) +
                     BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], TestAxis)) +
                     BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], TestAxis)));
     f32 MaxTriVertProj = Max(-Max(Max(AProj, BProj), CProj), Min(Min(AProj, BProj), CProj));
     b32 Result = (MaxTriVertProj > BoxRProj);
-#endif
     return Result;
+#endif
 }
 
 internal inline b32
@@ -56,18 +62,67 @@ DoesBoxIntersectPlane(vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 Plane
     return false;
 }
 
+internal inline void
+GetTriProjOnAxisMinMax(vec3 Axis, vec3 A, vec3 B, vec3 C, f32 *Out_Min, f32 *Out_Max)
+{
+    Assert(Out_Min);
+    Assert(Out_Max);
+    
+    f32 AProj = VecDot(A, Axis);
+    f32 BProj = VecDot(B, Axis);
+    f32 CProj = VecDot(C, Axis);
+    
+    *Out_Min = Min(Min(AProj, BProj), CProj);
+    *Out_Max = Max(Max(AProj, BProj), CProj);
+}
+
+internal inline void
+GetBoxProjOnAxisMinMax(vec3 Axis, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, f32 *Out_Min, f32 *Out_Max)
+{
+    Assert(Out_Min);
+    Assert(Out_Max);
+
+    f32 BoxCenterProj = VecDot(BoxCenter, Axis);
+    f32 BoxRProj = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], Axis)) +
+                    BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], Axis)) +
+                    BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], Axis)));
+    
+    *Out_Max = BoxCenterProj + BoxRProj;
+    *Out_Min = BoxCenterProj - BoxRProj;
+}
+
+internal inline f32
+GetRangesOverlap(f32 AMin, f32 AMax, f32 BMin, f32 BMax, b32 *Out_BComesFirst)
+{
+    f32 AMaxBMin = AMax - BMin;
+    f32 BMaxAMin = BMax - AMin;
+
+    b32 BComesFirst = (BMaxAMin < AMaxBMin);
+    
+    if (Out_BComesFirst) *Out_BComesFirst = BComesFirst;    
+    return (BComesFirst ? BMaxAMin : AMaxBMin);
+}
+
 internal inline b32
-IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 *Out_CollisionNormal, f32 *Out_PenetrationDepth)
+IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 *Out_CollisionNormal, f32 *Out_PenetrationDepth, f32 *Out_Overlaps = 0, u32 *Out_AI = 0)
 {
     // NOTE: Translate triangle as conceptually moving AABB to origin
-    A -= BoxCenter;
-    B -= BoxCenter;
-    C -= BoxCenter;
+    // A -= BoxCenter;
+    // B -= BoxCenter;
+    // C -= BoxCenter;
 
     // NOTE: Compute edge vectors of triangle
     vec3 AB = B - A;
     vec3 BC = C - B;
     vec3 CA = A - C;
+
+    // NOTE: Keep track of the axis of the shortest penetration depth, and the shortest penetration depth
+    // In case there was no separating axis found, that will be the collision normal.
+    // TODO: Maybe it's faster if we first do a fast check for any separating axis, and then calculate collision normal only if there was
+    // no separating axis.
+    f32 SmallestOverlap = FLT_MAX;
+    vec3 SmallestOverlapAxis = {};
+    u32 SmallestOverlapAxisIndex = 0;
 
     //
     // NOTE: Test exes a00..a22 (category 3)
@@ -82,10 +137,37 @@ IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExt
              ++EdgeIndex)
         {
             vec3 TestAxis = VecCross(BoxAxes[BoxAxisIndex], Edges[EdgeIndex]);
-
-            if (!IsZeroVector(TestAxis) && IsSeparatingAxisTriBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
+            if (!IsZeroVector(TestAxis))
             {
-                return true;
+                TestAxis = VecNormalize(TestAxis);
+
+                // GetTriProjOnAxisMinMax(vec3 Axis, vec3 A, vec3 B, vec3 C, f32 *Out_Min, f32 *Out_Max);
+                // GetBoxProjOnAxisMinMax(vec3 Axis, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, f32 *Out_Min, f32 *Out_Max);
+                // GetRangesOverlap(f32 AMin, f32 AMax, f32 BMin, f32 BMax, b32 *Out_BComesFirst);
+
+                f32 TriMin, TriMax;
+                GetTriProjOnAxisMinMax(TestAxis, A, B, C, &TriMin, &TriMax);
+
+                f32 BoxMin, BoxMax;
+                GetBoxProjOnAxisMinMax(TestAxis, BoxCenter, BoxExtents, BoxAxes, &BoxMin, &BoxMax);
+
+                b32 BoxIsInPositiveDirFromTri;
+                f32 Overlap = GetRangesOverlap(TriMin, TriMax, BoxMin, BoxMax, &BoxIsInPositiveDirFromTri);
+
+                if (Overlap < 0.0f)
+                {
+                    // NOTE: The axis is separating
+                    return true;
+                }
+
+                if (Out_Overlaps) Out_Overlaps[BoxAxisIndex*3+EdgeIndex] = Overlap;
+
+                if (Overlap < SmallestOverlap)
+                {
+                    SmallestOverlap = Overlap;
+                    SmallestOverlapAxis = BoxIsInPositiveDirFromTri ? TestAxis : -TestAxis;
+                    SmallestOverlapAxisIndex = BoxAxisIndex*3+EdgeIndex;
+                }
             }
         }
     }
@@ -98,27 +180,73 @@ IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExt
          ++BoxAxisIndex)
     {
         vec3 TestAxis = BoxAxes[BoxAxisIndex];
-        if (IsSeparatingAxisTriBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
+
+        f32 TriMin, TriMax;
+        GetTriProjOnAxisMinMax(TestAxis, A, B, C, &TriMin, &TriMax);
+
+        f32 BoxMin, BoxMax;
+        GetBoxProjOnAxisMinMax(TestAxis, BoxCenter, BoxExtents, BoxAxes, &BoxMin, &BoxMax);
+
+        b32 BoxIsInPositiveDirFromTri;
+        f32 Overlap = GetRangesOverlap(TriMin, TriMax, BoxMin, BoxMax, &BoxIsInPositiveDirFromTri);
+
+        if (Overlap < 0.0f)
         {
+            // NOTE: The axis is separating
             return true;
+        }
+
+        if (Out_Overlaps) Out_Overlaps[9+BoxAxisIndex] = Overlap;
+
+        if (Overlap < SmallestOverlap)
+        {
+            SmallestOverlap = Overlap;
+            SmallestOverlapAxis = BoxIsInPositiveDirFromTri ? TestAxis : -TestAxis;
+            SmallestOverlapAxisIndex = 9+BoxAxisIndex;
         }
     }
 
     //
     // NOTE: Test triangle's normal (category 2)
     //
-    vec3 TriNormal = VecNormalize(VecCross(AB, BC));
-    if (!IsZeroVector(TriNormal))
-    {
-        f32 TriPlaneDistance = VecDot(TriNormal, A);
-        if (!DoesBoxIntersectPlane(Vec3(), BoxExtents, BoxAxes, TriNormal, TriPlaneDistance, Out_PenetrationDepth))
+    {    
+        vec3 TestAxis = VecCross(AB, BC);
+        if (!IsZeroVector(TestAxis))
         {
-            return true;
+            TestAxis = VecNormalize(TestAxis);
+
+            f32 TriMin, TriMax;
+            GetTriProjOnAxisMinMax(TestAxis, A, B, C, &TriMin, &TriMax);
+
+            f32 BoxMin, BoxMax;
+            GetBoxProjOnAxisMinMax(TestAxis, BoxCenter, BoxExtents, BoxAxes, &BoxMin, &BoxMax);
+
+            b32 BoxIsInPositiveDirFromTri;
+            f32 Overlap = GetRangesOverlap(TriMin, TriMax, BoxMin, BoxMax, &BoxIsInPositiveDirFromTri);
+
+            if (Overlap < 0.0f)
+            {
+                // NOTE: The axis is separating
+                return true;
+            }
+
+            if (Out_Overlaps) Out_Overlaps[12] = Overlap;
+
+            if (Overlap < SmallestOverlap)
+            {
+                SmallestOverlap = Overlap;
+                SmallestOverlapAxis = BoxIsInPositiveDirFromTri ? TestAxis : -TestAxis;
+                SmallestOverlapAxisIndex = 12;
+            }
         }
     }
 
-    // NOTE: As all triangles are part of closed meshes, should be ok to always use the tri normal as the collision normal
-    if (Out_CollisionNormal) *Out_CollisionNormal = VecNormalize(TriNormal);
+    //
+    // NOTE: Did not find a separating axis, tri and box intersect, the axis of smallest penetration will be the collision normal
+    //
+    if (Out_CollisionNormal) *Out_CollisionNormal = SmallestOverlapAxis;
+    if (Out_PenetrationDepth) *Out_PenetrationDepth = SmallestOverlap;
+    if (Out_AI) *Out_AI = SmallestOverlapAxisIndex;
 
     return false;
 }
@@ -774,16 +902,29 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             MemoryArena_PushArrayAndZero(&GameState->TransientArena, GameState->WorldObjectInstanceCount, collision_debug_data);
     }
 
-    u32 CollisionIterations = 3;
-    b32 PlayerDidCollide = false;
+    vec3 TestA = Vec3(3, .5f, 15);
+    vec3 TestB = Vec3(15, .5f, 15);
+    vec3 TestC = Vec3(6, 4.f, 15);
+    DD_PushTriangle(&GameState->DebugDrawRenderUnit, TestA, TestB, TestC, Vec3(0,1,0));
+
+    u32 CollisionIterations = 4; // NOTE: Iteration #4 is only to check if iteration #3 solved collisions
+    b32 PlayerTranslationWasAdjusted = false;
+    b32 TranslationIsSafe = false;
     for (u32 IterationIndex = 0;
          IterationIndex < CollisionIterations;
          ++IterationIndex)
     {
+        // TODO: Make this proper
+        if (IgnoreCollisions)
+        {
+            TranslationIsSafe = true;
+            break;
+        }
+        
         f32 ShortestPenetrationDepth = FLT_MAX;
         vec3 CollisionNormal = {};
         
-        b32 WillCollide = false;
+        b32 TranslationWillWorsenACollision = false;
         
         for (u32 InstanceIndex = 1;
              InstanceIndex < GameState->WorldObjectInstanceCount;
@@ -836,16 +977,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                                                  PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
                                                                  PlayerAABB->Extents, AABoxAxes, &ThisCollisionNormal, &ThisPenetrationDepth);
 
-                                if (!IsPlayerAndTriSeparated)
+                                if (!IsPlayerAndTriSeparated &&
+                                    VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
+                                    ThisPenetrationDepth < ShortestPenetrationDepth)
                                 {
-                                    if (ThisPenetrationDepth < ShortestPenetrationDepth)
-                                    {
-                                        ShortestPenetrationDepth  = ThisPenetrationDepth;
-                                        CollisionNormal = ThisCollisionNormal;
-                                    }
+                                    ShortestPenetrationDepth  = ThisPenetrationDepth;
+                                    CollisionNormal = ThisCollisionNormal;
+                                    TranslationWillWorsenACollision = true;
                                 }
-
-                                WillCollide |= !IsPlayerAndTriSeparated;
                                 
                                 if (CollisionDebugData)
                                 {
@@ -867,11 +1006,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
                         f32 ThisPenetrationDepth = FLT_MAX;
                         vec3 ThisCollisionNormal = {};
-                        
-                        if (GameInput->CurrentKeyStates[SDL_SCANCODE_B])
-                        {
-                            Noop;
-                        }
                         
                         b32 SeparatingAxisFound = false;
                         for (u32 AxisIndex = 0;
@@ -907,16 +1041,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             }
                         }
 
-                        if (!SeparatingAxisFound)
+                        if (!SeparatingAxisFound &&
+                            VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
+                            ThisPenetrationDepth < ShortestPenetrationDepth)
                         {
-                            if (ThisPenetrationDepth < ShortestPenetrationDepth)
-                            {
-                                ShortestPenetrationDepth = ThisPenetrationDepth;
-                                CollisionNormal = ThisCollisionNormal;
-                            }
+                            ShortestPenetrationDepth = ThisPenetrationDepth;
+                            CollisionNormal = ThisCollisionNormal;
+                            TranslationWillWorsenACollision = true;
                         }
-
-                        WillCollide |= !SeparatingAxisFound;
 
                         if (CollisionDebugData)
                         {
@@ -950,30 +1082,71 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         // is possible, look into it later. But it will mean that we will saturate that limit of 4 collisions per iteration very easily.
         // Nvm this probably won't work. Solving 
 
-        // TODO: Make ignore collisions skip the whole collision check
-        if (!WillCollide || IgnoreCollisions)
         {
+            if (GameInput->CurrentKeyStates[SDL_SCANCODE_B] && IterationIndex == 0)
+            {
+                Noop;
+            }
+
+            vec3 ThisCollisionNormal;
+            f32 ThisPenetrationDepth;
+            f32 PDs[13] = {};
+            u32 AI;
+            b32 IsPlayerAndTriSeparated =
+                IsThereASeparatingAxisTriBox(TestA, TestB, TestC,
+                                             PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
+                                             PlayerAABB->Extents, AABoxAxes, &ThisCollisionNormal, &ThisPenetrationDepth, PDs, &AI);
+
+            if (!IsPlayerAndTriSeparated)
+            // if (!IsPlayerAndTriSeparated &&
+            //     VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
+            //     ThisPenetrationDepth < ShortestPenetrationDepth)
+            {
+
+                ShortestPenetrationDepth  = ThisPenetrationDepth;
+                CollisionNormal = ThisCollisionNormal;
+                TranslationWillWorsenACollision = true;
+                ImmText_DrawQuickString(SimpleStringF("PDs{%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f}",
+                                                      PDs[0],PDs[1],PDs[2],PDs[3],PDs[4],PDs[5],PDs[6],PDs[7],PDs[8],PDs[9],PDs[10],PDs[11],PDs[12]).D);
+                ImmText_DrawQuickString(SimpleStringF("CollisionNormal=<%0.6f,%0.6f,%0.6f>[%u]", CollisionNormal.X, CollisionNormal.Y, CollisionNormal.Z, AI).D);
+            }
+        }
+
+        
+        if (!TranslationWillWorsenACollision)
+        {
+            TranslationIsSafe = true;
+            if (IterationIndex > 0)
+            {
+                PlayerTranslationWasAdjusted = true;
+            }
             break;
         }
-#if 1
-        else if (WillCollide)
+        else
         {
-            PlayerDidCollide |= true;
+            if (IterationIndex == (CollisionIterations - 1))
+            {
+                // NOTE: If we were not able to find an adjustment to the translation that didn't worsen collisions after n-1 iterations,
+                // then the translation is not safe, it will not be applied.
+                break;
+            }
+            
+            vec3 CollidingTranslationComponentDir = -CollisionNormal;
+            f32 CollidingTranslationComponentMag = AbsF(VecDot(CollidingTranslationComponentDir, PlayerTranslation));
+            vec3 CollidingTranslationComponent = CollidingTranslationComponentMag * CollidingTranslationComponentDir;
 
-            // vec3 CollidingComponent = VecDot(PlayerTranslation, CollisionNormal) * CollisionNormal;
-            // PlayerTranslation -= CollidingComponent;
-            vec3 CollidingComponent = AbsF(VecDot(PlayerTranslation, CollisionNormal)) * CollisionNormal;
-            PlayerTranslation += CollidingComponent;
+            PlayerTranslation -= CollidingTranslationComponent;
 
             DD_PushSimpleVector(&GameState->DebugDrawRenderUnit, PlayerInstance->Position, PlayerInstance->Position + CollisionNormal, Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
         }
-#endif
     }
 
-    PlayerInstance->Position += PlayerTranslation;
 
-    SetThirdPersonCameraTarget(&GameState->Camera, PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0));
-
+    if (TranslationIsSafe)
+    {
+        PlayerInstance->Position += PlayerTranslation;
+        SetThirdPersonCameraTarget(&GameState->Camera, PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0));
+    }
 
     //
     // NOTE: Mouse picking
@@ -1169,7 +1342,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     if (GameState->DebugCollisions)
     {
         ImmText_DrawQuickString(SimpleStringF("Triangles checked %llu", TrianglesChecked).D);
-        CollisionDebugData[GameState->PlayerWorldInstanceID].IsColliding = PlayerDidCollide;
+        CollisionDebugData[GameState->PlayerWorldInstanceID].IsColliding = PlayerTranslationWasAdjusted;
         CollisionDebugData[GameState->PlayerWorldInstanceID].BoxExtents = PlayerAABB->Extents;
         CollisionDebugData[GameState->PlayerWorldInstanceID].BoxCenter = PlayerInstance->Position + PlayerAABB->Center;
         
