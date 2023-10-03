@@ -454,6 +454,27 @@ Quat(vec3 Axis, f32 AngleRads)
     return Result;
 }
 
+internal inline void
+QuatGetAxisAngle(quat Q, f32 *Out_AngleRads, vec3 *Out_Axis)
+{
+    f32 HalfAngle = ArcCosF(Q.W);
+    f32 SinHalfAngle = SinF(HalfAngle);
+    vec3 Axis = {};
+    if (AbsF(SinHalfAngle) > FLT_EPSILON)
+    {
+        Axis.X = Q.X / SinHalfAngle;
+        Axis.Y = Q.Y / SinHalfAngle;
+        Axis.Z = Q.Z / SinHalfAngle;
+    }
+    else
+    {
+        InvalidCodePath; // NOTE: Just want to check in which cases this happens
+    }
+
+    if (Out_AngleRads) *Out_AngleRads = HalfAngle * 2.0f;
+    if (Out_Axis) *Out_Axis = Axis;
+}
+
 internal inline quat
 operator-(quat Q)
 {

@@ -92,7 +92,7 @@ GetRangesOverlap(f32 AMin, f32 AMax, f32 BMin, f32 BMax, b32 *Out_BComesFirst)
 }
 
 internal inline b32
-IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 *Out_CollisionNormal, f32 *Out_PenetrationDepth, f32 *Out_Overlaps = 0, u32 *Out_AI = 0)
+IsThereASeparatingAxisTriBox(vec3 TranslationDir, vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 *Out_CollisionNormal, f32 *Out_PenetrationDepth, f32 *Out_Overlaps = 0, u32 *Out_AI = 0)
 {
     // NOTE: Translate triangle as conceptually moving AABB to origin
     // A -= BoxCenter;
@@ -115,6 +115,14 @@ IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExt
     // NOTE: Test triangle's normal
     {    
         vec3 TestAxis = VecCross(AB, BC);
+
+        if (VecDot(TranslationDir, TestAxis) > 0.0f)
+        {
+            // NOTE: If the translation is along triangle's normal, ignore collisions, as player is moving out of the
+            // triangle collision anyways
+            return true;
+        }
+        
         if (!IsZeroVector(TestAxis))
         {
             TestAxis = VecNormalize(TestAxis);
@@ -125,7 +133,8 @@ IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExt
             f32 BoxMin, BoxMax;
             GetBoxProjOnAxisMinMax(TestAxis, BoxCenter, BoxExtents, BoxAxes, &BoxMin, &BoxMax);
 
-            f32 Overlap = GetRangesOverlap(TriMin, TriMax, BoxMin, BoxMax, 0);
+            b32 BoxIsInNegativeDirFromTri;
+            f32 Overlap = GetRangesOverlap(TriMin, TriMax, BoxMin, BoxMax, &BoxIsInNegativeDirFromTri);
 
             if (Overlap < 0.0f)
             {
@@ -140,7 +149,7 @@ IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExt
             if (Overlap < SmallestOverlap)
             {
                 SmallestOverlap = Overlap;
-                SmallestOverlapAxis = TestAxis;
+                SmallestOverlapAxis = BoxIsInNegativeDirFromTri ? -TestAxis : TestAxis;
                 SmallestOverlapAxisIndex = 0;
             }
         }

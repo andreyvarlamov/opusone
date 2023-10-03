@@ -103,6 +103,9 @@ struct game_state
     f32 PlayerCameraYOffset;
     u32 PlayerWorldInstanceID;
 
+    f32 TestTriangleYaw;
+    f32 TestTrianglePitch;
+
     b32 DebugCollisions;
 };
 

@@ -477,6 +477,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     // NOTE: Game logic update
     //
     // GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
+
+    world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
+    world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
     
     f32 KeyboardLookSensitivity = 150.0f;
     f32 KeyboardDollySensitivity = 5.0f;
@@ -534,13 +537,49 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         UpdateCameraForceRadius(&GameState->Camera, 0);
     }
 
-    world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
-    world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
+    f32 TestTriangleRotSensitivity = 100.0f;
+    f32 TestTriangleDeltaYaw = 0.0f;
+    f32 TestTriangleDeltaPitch = 0.0f;
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_LEFT])
+    {
+        TestTriangleDeltaYaw -= 1.0f;
+    }
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_RIGHT])
+    {
+        TestTriangleDeltaYaw += 1.0f;
+    }
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_UP])
+    {
+        TestTriangleDeltaPitch += 1.0f;
+    }
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_DOWN])
+    {
+        TestTriangleDeltaPitch -= 1.0f;
+    }
+    GameState->TestTriangleYaw += TestTriangleDeltaYaw * TestTriangleRotSensitivity * GameInput->DeltaTime;
+    GameState->TestTrianglePitch += TestTriangleDeltaPitch * TestTriangleRotSensitivity * GameInput->DeltaTime;
+    if (GameState->TestTriangleYaw > 360.0f)
+    {
+        GameState->TestTriangleYaw -= 360.0f;
+    }
+    if (GameState->TestTriangleYaw < 0.0f)
+    {
+        GameState->TestTriangleYaw += 360.0f;
+    }
+    if (GameState->TestTrianglePitch > 360.0f)
+    {
+        GameState->TestTrianglePitch -= 360.0f;
+    }
+    if (GameState->TestTrianglePitch < 0.0f)
+    {
+        GameState->TestTrianglePitch += 360.0f;
+    }
 
     if (!GameInput->CurrentKeyStates[SDL_SCANCODE_TAB] && !GameInput->MouseButtonState[1])
     {
         PlayerInstance->Rotation = Quat(Vec3(0,1,0), ToRadiansF(GameState->Camera.Theta + 180.0f));
     }
+    
     vec3 PlayerTranslation = Vec3();
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_W])
     {
@@ -624,9 +663,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             MemoryArena_PushArray(&GameState->TransientArena, MaxCollisionDebugEntries, collision_debug_entry);
     }
 
-    vec3 TestA = Vec3(3, .5f, 15);
-    vec3 TestB = Vec3(15, .5f, 15);
-    vec3 TestC = Vec3(6, 4.f, 15);
+    vec3 TestTrianglePosition = Vec3(0,0,10);
+    vec3 TestA = Vec3(-5,0,0);
+    vec3 TestB = Vec3(5,0,0);
+    vec3 TestC = Vec3(0,6,0);
+    quat TestTriangleQuat = Quat(Vec3(0,1,0),ToRadiansF(GameState->TestTriangleYaw)) * Quat(Vec3(1,0,0), ToRadiansF(GameState->TestTrianglePitch));
+    TestA = RotateVecByQuatSlow(TestA, TestTriangleQuat) + TestTrianglePosition;
+    TestB = RotateVecByQuatSlow(TestB, TestTriangleQuat) + TestTrianglePosition;
+    TestC = RotateVecByQuatSlow(TestC, TestTriangleQuat) + TestTrianglePosition;
     DD_PushTriangle(&GameState->DebugDrawRenderUnit, TestA, TestB, TestC, Vec3(0,1,0));
 
     u32 CollisionIterations = 4; // NOTE: Iteration #4 is only to check if iteration #3 solved collisions
@@ -695,7 +739,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                 vec3 ThisCollisionNormal;
                                 f32 ThisPenetrationDepth;
                                 b32 IsPlayerAndTriSeparated =
-                                    IsThereASeparatingAxisTriBox(A, B, C,
+                                    IsThereASeparatingAxisTriBox(PlayerTranslation, A, B, C,
                                                                  PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
                                                                  PlayerAABB->Extents, AABoxAxes, &ThisCollisionNormal, &ThisPenetrationDepth);
 
@@ -833,19 +877,20 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             f32 PDs[13] = {};
             u32 AI;
             b32 IsPlayerAndTriSeparated =
-                IsThereASeparatingAxisTriBox(TestA, TestB, TestC,
+                IsThereASeparatingAxisTriBox(PlayerTranslation, TestA, TestB, TestC,
                                              PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
                                              PlayerAABB->Extents, AABoxAxes, &ThisCollisionNormal, &ThisPenetrationDepth, PDs, &AI);
 
-            // if (!IsPlayerAndTriSeparated)
-            if (!IsPlayerAndTriSeparated &&
-                VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
-                ThisPenetrationDepth < ShortestPenetrationDepth)
+            if (!IsPlayerAndTriSeparated)
             {
 
-                ShortestPenetrationDepth  = ThisPenetrationDepth;
-                CollisionNormal = ThisCollisionNormal;
-                TranslationWillWorsenACollision = true;
+                if (VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
+                    ThisPenetrationDepth < ShortestPenetrationDepth)
+                {
+                    ShortestPenetrationDepth  = ThisPenetrationDepth;
+                    CollisionNormal = ThisCollisionNormal;
+                    TranslationWillWorsenACollision = true;
+                }
                 ImmText_DrawQuickString(SimpleStringF("PDs{%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f}",
                                                       PDs[0],PDs[1],PDs[2],PDs[3],PDs[4],PDs[5],PDs[6],PDs[7],PDs[8],PDs[9],PDs[10],PDs[11],PDs[12]).D);
                 ImmText_DrawQuickString(SimpleStringF("CollisionNormal=<%0.6f,%0.6f,%0.6f>[%u]", CollisionNormal.X, CollisionNormal.Y, CollisionNormal.Z, AI).D);
@@ -1127,7 +1172,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
         collision_debug_entry *Entry = CollisionDebugEntries;
         // NOTE: First only draw non-affected geometry
-        #if 1
+        #if 0
         for (u32 EntryIndex = 0;
              EntryIndex < CurrentCollisionDebugEntry;
              ++EntryIndex, ++Entry)
@@ -1191,7 +1236,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                         DD_PushAABox(&GameState->DebugDrawRenderUnit, Entry->D.BoxCenter, Entry->D.BoxExtents, Color);
                         if (Entry->State == COLLISION_DEBUG_COLLIDED)
                         {
-                            ImmText_DrawQuickString(SimpleStringF("Collision: inst#%d [aabb]", Entry->InstanceIndex).D);
+                            ImmText_DrawQuickString(SimpleStringF("Collision: inst#%d [aabb], %0.3f,%0.3f,%0.3f", Entry->InstanceIndex,
+                                                                  Color.R, Color.G, Color.B).D);
                         }
                     } break;
 
@@ -1200,8 +1246,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                         DD_PushTriangle(&GameState->DebugDrawRenderUnit, Entry->D.Tri[0], Entry->D.Tri[1], Entry->D.Tri[2], Color);
                         if (Entry->State == COLLISION_DEBUG_COLLIDED)
                         {
-                            ImmText_DrawQuickString(SimpleStringF("Collision: inst#%d [mesh#%d;tri#%d]",
-                                                                  Entry->InstanceIndex, Entry->D.MeshIndex, Entry->D.TriIndex).D);
+                            ImmText_DrawQuickString(SimpleStringF("Collision: inst#%d [mesh#%d;tri#%d], %0.3f,%0.3f,%0.3f",
+                                                                  Entry->InstanceIndex, Entry->D.MeshIndex, Entry->D.TriIndex,
+                                                                  Color.R, Color.G, Color.B).D);
                         }
                     } break;
 

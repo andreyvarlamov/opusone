@@ -45,6 +45,12 @@ ToRadiansF(f32 Degrees)
 }
 
 internal inline f32
+ToDegreesF(f32 Radians)
+{
+    return (Radians / PI32 * 180.0f);
+}
+
+internal inline f32
 ArcSinF(f32 Value)
 {
     return asinf(Value);
