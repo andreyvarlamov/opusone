@@ -2,54 +2,6 @@
 #include "opusone_math.h"
 #include "opusone_linmath.h"
 
-internal inline b32
-IsSeparatingAxisTriBox(vec3 TestAxis, vec3 A, vec3 B, vec3 C, vec3 BoxExtents, vec3 *BoxAxes, f32 *Out_PenetrationDistance)
-{
-    f32 AProj = VecDot(A, TestAxis);
-    f32 BProj = VecDot(B, TestAxis);
-    f32 CProj = VecDot(C, TestAxis);
-#if 1
-    f32 MinTriProj = Min(Min(AProj, BProj), CProj);
-    f32 MaxTriProj = Max(Max(AProj, BProj), CProj);
-    f32 MaxBoxProj = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], TestAxis)) +
-                      BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], TestAxis)) +
-                      BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], TestAxis)));
-    f32 MinBoxProj = -MaxBoxProj;
-    if (MaxTriProj < MinBoxProj || MinTriProj > MaxBoxProj)
-    {
-        return true;
-    }
-    
-    if (Out_PenetrationDistance) *Out_PenetrationDistance = Min(MaxBoxProj - MinTriProj, MaxTriProj - MinBoxProj);
-    return false;
-#else
-    f32 BoxRProj = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], TestAxis)) +
-                    BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], TestAxis)) +
-                    BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], TestAxis)));
-    f32 MaxTriVertProj = Max(-Max(Max(AProj, BProj), CProj), Min(Min(AProj, BProj), CProj));
-    b32 Result = (MaxTriVertProj > BoxRProj);
-    return Result;
-#endif
-}
-
-internal inline b32
-DoesBoxIntersectPlane(vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 PlaneNormal, f32 PlaneDistance, f32 *Out_PenetrationDistance)
-{
-    f32 BoxRProjTowardsPlane = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], PlaneNormal)) +
-                                BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], PlaneNormal)) +
-                                BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], PlaneNormal)));
-
-    f32 PlaneProjFromBoxC = VecDot(PlaneNormal, BoxCenter) - PlaneDistance;
-
-    if (AbsF(PlaneProjFromBoxC) <= BoxRProjTowardsPlane)
-    {
-        if (Out_PenetrationDistance) *Out_PenetrationDistance = BoxRProjTowardsPlane - PlaneProjFromBoxC;
-        return true;
-    }
-    
-    return false;
-}
-
 internal inline void
 GetTriProjOnAxisMinMax(vec3 Axis, vec3 A, vec3 B, vec3 C, f32 *Out_Min, f32 *Out_Max)
 {
@@ -92,7 +44,7 @@ GetRangesOverlap(f32 AMin, f32 AMax, f32 BMin, f32 BMax, b32 *Out_BComesFirst)
 }
 
 internal inline b32
-IsThereASeparatingAxisTriBox(vec3 TranslationDir, vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 *Out_CollisionNormal, f32 *Out_PenetrationDepth, f32 *Out_Overlaps = 0, u32 *Out_AI = 0)
+IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap, b32 *Out_OverlapAxisIsTriNormal)
 {
     // NOTE: Translate triangle as conceptually moving AABB to origin
     // A -= BoxCenter;
@@ -111,22 +63,14 @@ IsThereASeparatingAxisTriBox(vec3 TranslationDir, vec3 A, vec3 B, vec3 C, vec3 B
     f32 SmallestOverlap = FLT_MAX;
     vec3 SmallestOverlapAxis = {};
     u32 SmallestOverlapAxisIndex = 0;
-    
+    b32 OverlapAxisIsTriNormal = false;
+
     // NOTE: Test triangle's normal
     {    
-        vec3 TestAxis = VecCross(AB, BC);
-
-        if (VecDot(TranslationDir, TestAxis) > 0.0f)
-        {
-            // NOTE: If the translation is along triangle's normal, ignore collisions, as player is moving out of the
-            // triangle collision anyways
-            return true;
-        }
+        vec3 TestAxis = VecNormalize(VecCross(AB, BC));
         
         if (!IsZeroVector(TestAxis))
         {
-            TestAxis = VecNormalize(TestAxis);
-
             f32 TriMin, TriMax;
             GetTriProjOnAxisMinMax(TestAxis, A, B, C, &TriMin, &TriMax);
 
@@ -142,15 +86,12 @@ IsThereASeparatingAxisTriBox(vec3 TranslationDir, vec3 A, vec3 B, vec3 C, vec3 B
                 return true;
             }
 
-            f32 UnidirectionalOverlap = TriMax - BoxMin;
-
-            if (Out_Overlaps) Out_Overlaps[0] = Overlap;
-
             if (Overlap < SmallestOverlap)
             {
                 SmallestOverlap = Overlap;
                 SmallestOverlapAxis = BoxIsInNegativeDirFromTri ? -TestAxis : TestAxis;
                 SmallestOverlapAxisIndex = 0;
+                OverlapAxisIsTriNormal = true;
             }
         }
     }
@@ -161,7 +102,7 @@ IsThereASeparatingAxisTriBox(vec3 TranslationDir, vec3 A, vec3 B, vec3 C, vec3 B
          ++BoxAxisIndex)
     {
         vec3 TestAxis = BoxAxes[BoxAxisIndex];
-
+        
         f32 TriMin, TriMax;
         GetTriProjOnAxisMinMax(TestAxis, A, B, C, &TriMin, &TriMax);
 
@@ -177,13 +118,12 @@ IsThereASeparatingAxisTriBox(vec3 TranslationDir, vec3 A, vec3 B, vec3 C, vec3 B
             return true;
         }
 
-        if (Out_Overlaps) Out_Overlaps[1+BoxAxisIndex] = Overlap;
-
         if (Overlap < SmallestOverlap)
         {
             SmallestOverlap = Overlap;
             SmallestOverlapAxis = BoxIsInNegativeDirFromTri ? -TestAxis : TestAxis;
             SmallestOverlapAxisIndex = 1+BoxAxisIndex;
+            OverlapAxisIsTriNormal = false;
         }
     }
 
@@ -202,10 +142,6 @@ IsThereASeparatingAxisTriBox(vec3 TranslationDir, vec3 A, vec3 B, vec3 C, vec3 B
             {
                 TestAxis = VecNormalize(TestAxis);
 
-                // GetTriProjOnAxisMinMax(vec3 Axis, vec3 A, vec3 B, vec3 C, f32 *Out_Min, f32 *Out_Max);
-                // GetBoxProjOnAxisMinMax(vec3 Axis, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, f32 *Out_Min, f32 *Out_Max);
-                // GetRangesOverlap(f32 AMin, f32 AMax, f32 BMin, f32 BMax, b32 *Out_BComesFirst);
-
                 f32 TriMin, TriMax;
                 GetTriProjOnAxisMinMax(TestAxis, A, B, C, &TriMin, &TriMax);
 
@@ -221,13 +157,12 @@ IsThereASeparatingAxisTriBox(vec3 TranslationDir, vec3 A, vec3 B, vec3 C, vec3 B
                     return true;
                 }
 
-                if (Out_Overlaps) Out_Overlaps[4+BoxAxisIndex*3+EdgeIndex] = Overlap;
-
                 if (Overlap < SmallestOverlap)
                 {
                     SmallestOverlap = Overlap;
                     SmallestOverlapAxis = BoxIsInNegativeDirFromTri ? -TestAxis : TestAxis;
                     SmallestOverlapAxisIndex = 4+BoxAxisIndex*3+EdgeIndex;
+                    OverlapAxisIsTriNormal = false;
                 }
             }
         }
@@ -236,10 +171,101 @@ IsThereASeparatingAxisTriBox(vec3 TranslationDir, vec3 A, vec3 B, vec3 C, vec3 B
     //
     // NOTE: Did not find a separating axis, tri and box intersect, the axis of smallest penetration will be the collision normal
     //
-    if (Out_CollisionNormal) *Out_CollisionNormal = SmallestOverlapAxis;
-    if (Out_PenetrationDepth) *Out_PenetrationDepth = SmallestOverlap;
-    if (Out_AI) *Out_AI = SmallestOverlapAxisIndex;
+    if (Out_SmallestOverlapAxis) *Out_SmallestOverlapAxis = SmallestOverlapAxis;
+    if (Out_SmallestOverlap) *Out_SmallestOverlap = SmallestOverlap;
+    if (Out_OverlapAxisIsTriNormal) *Out_OverlapAxisIsTriNormal = OverlapAxisIsTriNormal;
+    
+    return false;
+}
 
+internal inline b32
+IsSeparatingAxisTriBox(vec3 TestAxis, vec3 A, vec3 B, vec3 C, vec3 BoxExtents, vec3 *BoxAxes)
+{
+    f32 AProj = VecDot(A, TestAxis);
+    f32 BProj = VecDot(B, TestAxis);
+    f32 CProj = VecDot(C, TestAxis);
+    f32 BoxRProj = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], TestAxis)) +
+                    BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], TestAxis)) +
+                    BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], TestAxis)));
+    f32 MaxTriVertProj = Max(-Max(Max(AProj, BProj), CProj), Min(Min(AProj, BProj), CProj));
+    b32 Result = (MaxTriVertProj > BoxRProj);
+    return Result;
+}
+
+internal inline b32
+DoesBoxIntersectPlane(vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 PlaneNormal, f32 PlaneDistance, f32 *Out_Overlap)
+{
+    f32 BoxRProjTowardsPlane = (BoxExtents.E[0] * AbsF(VecDot(BoxAxes[0], PlaneNormal)) +
+                                BoxExtents.E[1] * AbsF(VecDot(BoxAxes[1], PlaneNormal)) +
+                                BoxExtents.E[2] * AbsF(VecDot(BoxAxes[2], PlaneNormal)));
+
+    f32 PlaneProjFromBoxC = VecDot(PlaneNormal, BoxCenter) - PlaneDistance;
+
+    if (AbsF(PlaneProjFromBoxC) <= BoxRProjTowardsPlane)
+    {
+        if (Out_Overlap) *Out_Overlap = BoxRProjTowardsPlane - PlaneProjFromBoxC;
+        return true;
+    }
+    
+    return false;
+}
+
+internal inline b32
+IsThereASeparatingAxisTriBoxFast(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, f32 *Out_TriNormalOverlap)
+{
+    // NOTE: Translate triangle as conceptually moving AABB to origin
+    A -= BoxCenter;
+    B -= BoxCenter;
+    C -= BoxCenter;
+    // NOTE: Compute edge vectors of triangle
+    vec3 AB = B - A;
+    vec3 BC = C - B;
+    vec3 CA = A - C;
+    //
+    // NOTE: Test exes a00..a22 (category 3)
+    //
+    vec3 Edges[] = { AB, BC, CA };
+    for (u32 BoxAxisIndex = 0;
+         BoxAxisIndex < 3;
+         ++BoxAxisIndex)
+    {
+        for (u32 EdgeIndex = 0;
+             EdgeIndex < 3;
+             ++EdgeIndex)
+        {
+            vec3 TestAxis = VecCross(BoxAxes[BoxAxisIndex], Edges[EdgeIndex]);
+            if (!IsZeroVector(TestAxis) && IsSeparatingAxisTriBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
+            {
+                return true;
+            }
+        }
+    }
+    //
+    // NOTE: Test box's 3 normals (category 1)
+    //
+    for (u32 BoxAxisIndex = 0;
+         BoxAxisIndex < 3;
+         ++BoxAxisIndex)
+    {
+        vec3 TestAxis = BoxAxes[BoxAxisIndex];
+        if (IsSeparatingAxisTriBox(TestAxis, A, B, C, BoxExtents, BoxAxes))
+        {
+            return true;
+        }
+    }
+    //
+    // NOTE: Test triangle's normal (category 2)
+    //
+    vec3 TriNormal = VecNormalize(VecCross(AB, BC));
+    if (!IsZeroVector(TriNormal))
+    {
+        f32 TriPlaneDistance = VecDot(TriNormal, A);
+        if (!DoesBoxIntersectPlane(Vec3(), BoxExtents, BoxAxes, TriNormal, TriPlaneDistance, Out_TriNormalOverlap))
+        {
+            return true;
+        }
+    }
+    
     return false;
 }
 

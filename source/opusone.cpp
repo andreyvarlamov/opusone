@@ -687,7 +687,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             break;
         }
         
-        f32 ShortestPenetrationDepth = FLT_MAX;
+        f32 SmallestPenetrationDepth = FLT_MAX;
         vec3 CollisionNormal = {};
         
         b32 TranslationWillWorsenACollision = false;
@@ -724,6 +724,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             u32 TriangleCount = ImportedMesh->IndexCount / 3;
                             Assert(ImportedMesh->IndexCount % 3 == 0);
 
+                            vec3 MeshSmallestOverlapAxis = {};
+                            f32 MeshSmallestOverlap = FLT_MAX;
+                            b32 MeshTriNormalOverlapFound = false;
+                            b32 CollidingTriangleIsFound = false;
+
                             for (u32 TriangleIndex = 0;
                                  TriangleIndex < TriangleCount;
                                  ++TriangleIndex)
@@ -736,28 +741,74 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                 vec3 B = InstanceTransform * ImportedMesh->VertexPositions[IndexB] + InstanceTranslation;
                                 vec3 C = InstanceTransform * ImportedMesh->VertexPositions[IndexC] + InstanceTranslation;
 
-                                vec3 ThisCollisionNormal;
-                                f32 ThisPenetrationDepth;
-                                b32 IsPlayerAndTriSeparated =
-                                    IsThereASeparatingAxisTriBox(PlayerTranslation, A, B, C,
-                                                                 PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
-                                                                 PlayerAABB->Extents, AABoxAxes, &ThisCollisionNormal, &ThisPenetrationDepth);
+                                vec3 TriSmallestOverlapAxis;
+                                f32 TriSmallestOverlap;
+                                b32 TriOverlapAxisIsTriNormal;
 
-                                if (!IsPlayerAndTriSeparated &&
-                                    VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
-                                    ThisPenetrationDepth < ShortestPenetrationDepth)
+                                vec3 TriNormal = VecNormalize(VecCross(B - A, C - B));
+
+                                b32 IsSeparated;
+
+                                if (VecDot(TriNormal, PlayerTranslation) > FLT_EPSILON)
                                 {
-                                    ShortestPenetrationDepth  = ThisPenetrationDepth;
-                                    CollisionNormal = ThisCollisionNormal;
-                                    TranslationWillWorsenACollision = true;
+                                    IsSeparated = 
+                                        IsThereASeparatingAxisTriBoxFast(A, B, C,
+                                                                         PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
+                                                                         PlayerAABB->Extents, AABoxAxes,
+                                                                         &TriSmallestOverlap);
+                                    TriSmallestOverlapAxis = TriNormal;
+                                    TriOverlapAxisIsTriNormal = true;
                                 }
-                                
+                                else
+                                {
+                                    IsSeparated =
+                                        IsThereASeparatingAxisTriBox(A, B, C,
+                                                                     PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
+                                                                     PlayerAABB->Extents, AABoxAxes,
+                                                                     &TriSmallestOverlapAxis,
+                                                                     &TriSmallestOverlap, &TriOverlapAxisIsTriNormal);
+                                }
+
+                                if (!IsSeparated)
+                                {
+                                    CollidingTriangleIsFound = true;
+
+                                    if (TriOverlapAxisIsTriNormal)
+                                    {
+                                        if (MeshTriNormalOverlapFound)
+                                        {
+                                            if (TriSmallestOverlap < MeshSmallestOverlap)
+                                            {
+                                                MeshSmallestOverlap = TriSmallestOverlap;
+                                                MeshSmallestOverlapAxis = TriSmallestOverlapAxis;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            MeshSmallestOverlap = TriSmallestOverlap;
+                                            MeshSmallestOverlapAxis = TriSmallestOverlapAxis;
+                                            MeshTriNormalOverlapFound = true;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (!MeshTriNormalOverlapFound)
+                                        {
+                                            if (TriSmallestOverlap < MeshSmallestOverlap)
+                                            {
+                                                MeshSmallestOverlap = TriSmallestOverlap;
+                                                MeshSmallestOverlapAxis = TriSmallestOverlapAxis;
+                                            }
+                                        }
+                                    }
+                                }
+
                                 if (CollisionDebugEntries)
                                 {
                                     collision_debug_entry *Entry = CollisionDebugEntries + CurrentCollisionDebugEntry++;
                                     *Entry = {};
 
-                                    if (!IsPlayerAndTriSeparated)
+                                    if (!IsSeparated)
                                     {
                                         Entry->State = COLLISION_DEBUG_COLLIDED;
                                     }
@@ -769,6 +820,19 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                     Entry->D.Tri[0] = A;
                                     Entry->D.Tri[1] = B;
                                     Entry->D.Tri[2] = C;
+                                }
+                            }
+
+                            if (CollidingTriangleIsFound)
+                            {
+                                if (VecDot(MeshSmallestOverlapAxis, PlayerTranslation) <= FLT_EPSILON)
+                                {
+                                    if (MeshSmallestOverlap < SmallestPenetrationDepth)
+                                    {
+                                        SmallestPenetrationDepth = MeshSmallestOverlap;
+                                        CollisionNormal = MeshSmallestOverlapAxis;
+                                        TranslationWillWorsenACollision = true;
+                                    }
                                 }
                             }
                         }
@@ -818,9 +882,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
                         if (!SeparatingAxisFound &&
                             VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
-                            ThisPenetrationDepth < ShortestPenetrationDepth)
+                            ThisPenetrationDepth < SmallestPenetrationDepth)
                         {
-                            ShortestPenetrationDepth = ThisPenetrationDepth;
+                            SmallestPenetrationDepth = ThisPenetrationDepth;
                             CollisionNormal = ThisCollisionNormal;
                             TranslationWillWorsenACollision = true;
                         }
@@ -866,24 +930,34 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         // is possible, look into it later. But it will mean that we will saturate that limit of 4 collisions per iteration very easily.
         // Nvm this probably won't work. Solving 
 
+        #if 0
         {
             if (GameInput->CurrentKeyStates[SDL_SCANCODE_B] && IterationIndex == 0)
             {
                 Noop;
             }
 
+            vec3 TriNormal = VecNormalize(VecCross(TestB - TestA, TestC - TestB));
+            
             vec3 ThisCollisionNormal;
             f32 ThisPenetrationDepth;
             f32 PDs[13] = {};
             u32 AI;
             b32 IsPlayerAndTriSeparated =
-                IsThereASeparatingAxisTriBox(PlayerTranslation, TestA, TestB, TestC,
+                IsThereASeparatingAxisTriBox(TriNormal, TestA, TestB, TestC,
                                              PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center,
-                                             PlayerAABB->Extents, AABoxAxes, &ThisCollisionNormal, &ThisPenetrationDepth, PDs, &AI);
+                                             PlayerAABB->Extents, AABoxAxes, &ThisCollisionNormal, &ThisPenetrationDepth, PDs, &AI,
+                                             GameInput->CurrentKeyStates[SDL_SCANCODE_O]);
 
+            
+            
             if (!IsPlayerAndTriSeparated)
             {
-
+                if (VecDot(TriNormal, PlayerTranslation) > FLT_EPSILON || IsZeroVector(PlayerTranslation))
+                {
+                    ThisCollisionNormal = TriNormal;
+                }
+                
                 if (VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
                     ThisPenetrationDepth < ShortestPenetrationDepth)
                 {
@@ -891,12 +965,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     CollisionNormal = ThisCollisionNormal;
                     TranslationWillWorsenACollision = true;
                 }
-                ImmText_DrawQuickString(SimpleStringF("PDs{%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f}",
-                                                      PDs[0],PDs[1],PDs[2],PDs[3],PDs[4],PDs[5],PDs[6],PDs[7],PDs[8],PDs[9],PDs[10],PDs[11],PDs[12]).D);
-                ImmText_DrawQuickString(SimpleStringF("CollisionNormal=<%0.6f,%0.6f,%0.6f>[%u]", CollisionNormal.X, CollisionNormal.Y, CollisionNormal.Z, AI).D);
+                // ImmText_DrawQuickString(SimpleStringF("PDs{%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f,%0.3f}",
+                //                                       PDs[0],PDs[1],PDs[2],PDs[3],PDs[4],PDs[5],PDs[6],PDs[7],PDs[8],PDs[9],PDs[10],PDs[11],PDs[12]).D);
+                // ImmText_DrawQuickString(SimpleStringF("CollisionNormal=<%0.6f,%0.6f,%0.6f>[%u]", CollisionNormal.X, CollisionNormal.Y, CollisionNormal.Z, AI).D);
             }
         }
-
+        #endif
         
         if (!TranslationWillWorsenACollision)
         {
