@@ -23,6 +23,7 @@
     <ClCompile Include="..\..\source\opusone_animation.cpp" />
     <ClCompile Include="..\..\source\opusone_assimp.cpp" />
     <ClCompile Include="..\..\source\opusone_camera.cpp" />
+    <ClCompile Include="..\..\source\opusone_collision.cpp" />
     <ClCompile Include="..\..\source\opusone_debug_draw.cpp" />
     <ClCompile Include="..\..\source\opusone_geometry.cpp" />
     <ClCompile Include="..\..\source\opusone_immtext.cpp" />
@@ -34,6 +35,7 @@
     <ClInclude Include="..\..\source\opusone_animation.h" />
     <ClInclude Include="..\..\source\opusone_assimp.h" />
     <ClInclude Include="..\..\source\opusone_camera.h" />
+    <ClInclude Include="..\..\source\opusone_collision.h" />
     <ClInclude Include="..\..\source\opusone_common.h" />
     <ClInclude Include="..\..\source\opusone_immtext.h" />
     <ClInclude Include="..\..\source\opusone_linmath.h" />

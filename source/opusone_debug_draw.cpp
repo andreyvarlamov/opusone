@@ -6,7 +6,7 @@
 #include "opusone_render.h"
 
 void
-DD_PushAABox(render_unit *RenderUnit, vec3 Position, vec3 Extents, vec3 Color)
+DD_DrawAABox(render_unit *RenderUnit, vec3 Position, vec3 Extents, vec3 Color)
 {
     Assert(RenderUnit);
     
@@ -76,7 +76,7 @@ DD_PushAABox(render_unit *RenderUnit, vec3 Position, vec3 Extents, vec3 Color)
 }
 
 void
-DD_PushVector(render_unit *RenderUnit, vec3 A, vec3 B, vec3 AColor, vec3 BColor, f32 LineWidth)
+DD_DrawVector(render_unit *RenderUnit, vec3 A, vec3 B, vec3 AColor, vec3 BColor, f32 LineWidth)
 {
     vec3 Vertices[] = { A, B };
     u32 VertexCount = ArrayCount(Vertices);
@@ -112,13 +112,7 @@ DD_PushVector(render_unit *RenderUnit, vec3 A, vec3 B, vec3 AColor, vec3 BColor,
 }
 
 void
-DD_PushSimpleVector(render_unit *RenderUnit, vec3 A, vec3 B, vec3 Color)
-{
-    DD_PushVector(RenderUnit, A, B, Color, Color, 1.0f);
-}
-
-void
-DD_PushPoint(render_unit *RenderUnit, vec3 Point, vec3 Color, f32 PointSize)
+DD_DrawPoint(render_unit *RenderUnit, vec3 Point, vec3 Color, f32 PointSize)
 {
     vec3 Vertices[] = { Point };
     u32 VertexCount = ArrayCount(Vertices);
@@ -154,21 +148,21 @@ DD_PushPoint(render_unit *RenderUnit, vec3 Point, vec3 Color, f32 PointSize)
 }
 
 void
-DD_PushCoordinateAxes(render_unit *RenderUnit, vec3 Position, vec3 X, vec3 Y, vec3 Z, f32 Scale)
+DD_DrawAxes(render_unit *RenderUnit, vec3 Position, vec3 X, vec3 Y, vec3 Z, f32 Scale)
 {
-    DD_PushVector(RenderUnit,
+    DD_DrawVector(RenderUnit,
                   Position, Position + X * Scale,
-                  Vec3(0.8f, 0.8f, 0.8f), Vec3(1.0f, 0.0f, 0.0f), 3.0f);
-    DD_PushVector(RenderUnit,
+                  Vec3(0.8f, 0.8f, 0.8f), Vec3(1.0f, 0.0f, 0.0f), 2.0f);
+    DD_DrawVector(RenderUnit,
                   Position, Position + Y * Scale,
-                  Vec3(0.8f, 0.8f, 0.8f), Vec3(0.0f, 1.0f, 0.0f), 3.0f);
-    DD_PushVector(RenderUnit,
+                  Vec3(0.8f, 0.8f, 0.8f), Vec3(0.0f, 1.0f, 0.0f), 2.0f);
+    DD_DrawVector(RenderUnit,
                   Position, Position + Z * Scale,
-                  Vec3(0.8f, 0.8f, 0.8f), Vec3(0.0f, 0.0f, 1.0f), 3.0f);
+                  Vec3(0.8f, 0.8f, 0.8f), Vec3(0.0f, 0.0f, 1.0f), 2.0f);
 }
 
 void
-DD_PushTriangle(render_unit *RenderUnit, vec3 A, vec3 B, vec3 C, vec3 Color)
+DD_DrawTriangle(render_unit *RenderUnit, vec3 A, vec3 B, vec3 C, vec3 Color)
 {
     vec3 Vertices[] = { A, B, C };
     u32 VertexCount = ArrayCount(Vertices);
@@ -200,6 +194,32 @@ DD_PushTriangle(render_unit *RenderUnit, vec3 A, vec3 B, vec3 C, vec3 Color)
     Assert(AttribCount <= ArrayCount(AttribData));
 
     SubVertexDataForRenderUnit(RenderUnit, AttribData, AttribCount, Indices, VertexCount, IndexCount);
+}
+
+global_variable render_unit *_DDQuick_RenderUnit;
+
+void
+DD_InitializeQuickDraw(render_unit *RenderUnit)
+{
+    _DDQuick_RenderUnit = RenderUnit;
+}
+
+void
+DD_DrawQuickVector(vec3 A, vec3 B, vec3 Color)
+{
+    DD_DrawVector(_DDQuick_RenderUnit, A, B, Color, Color, 1.0f);
+}
+
+void
+DD_DrawQuickAABox(vec3 Position, vec3 Extents, vec3 Color)
+{
+    DD_DrawAABox(_DDQuick_RenderUnit, Position, Extents, Color);
+}
+
+void
+DD_DrawQuickTriangle(vec3 A, vec3 B, vec3 C, vec3 Color)
+{
+    DD_DrawTriangle(_DDQuick_RenderUnit, A, B, C, Color);
 }
 
 #endif

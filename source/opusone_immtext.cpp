@@ -393,17 +393,17 @@ ImmText_DrawString(const char *String, font_info *FontInfo, i32 X, i32 Y, u32 Sc
     MemoryArena_Unfreeze(Arena);
 }
 
-global_variable font_info *QD_Font;
-global_variable i32 QD_StartingX;
-global_variable i32 QD_StartingY;
-global_variable i32 QD_CurrentX;
-global_variable i32 QD_CurrentY;
-global_variable i32 QD_ScreenWidth;
-global_variable i32 QD_ScreenHeight;
-global_variable vec3 QD_Color;
-global_variable vec3 QD_BgColor;
-global_variable render_unit *QD_RenderUnit;
-global_variable memory_arena *QD_Arena;
+global_variable font_info *_ImmTextQuick_Font;
+global_variable i32 _ImmTextQuick_StartingX;
+global_variable i32 _ImmTextQuick_StartingY;
+global_variable i32 _ImmTextQuick_CurrentX;
+global_variable i32 _ImmTextQuick_CurrentY;
+global_variable i32 _ImmTextQuick_ScreenWidth;
+global_variable i32 _ImmTextQuick_ScreenHeight;
+global_variable vec3 _ImmTextQuick_Color;
+global_variable vec3 _ImmTextQuick_BgColor;
+global_variable render_unit *_ImmTextQuick_RenderUnit;
+global_variable memory_arena *_ImmTextQuick_Arena;
 
 void
 ImmText_InitializeQuickDraw(font_info *Font,
@@ -411,32 +411,32 @@ ImmText_InitializeQuickDraw(font_info *Font,
                             vec3 Color, vec3 BgColor,
                             render_unit *RenderUnit, memory_arena *Arena)
 {
-    QD_Font = Font;
-    QD_CurrentX = X;
-    QD_CurrentY = Y;
-    QD_StartingX = X;
-    QD_StartingY = Y;
-    QD_ScreenWidth = ScreenWidth;
-    QD_ScreenHeight = ScreenHeight;
-    QD_Color = Color;
-    QD_BgColor = BgColor;
-    QD_RenderUnit = RenderUnit;
-    QD_Arena = Arena;
+    _ImmTextQuick_Font = Font;
+    _ImmTextQuick_CurrentX = X;
+    _ImmTextQuick_CurrentY = Y;
+    _ImmTextQuick_StartingX = X;
+    _ImmTextQuick_StartingY = Y;
+    _ImmTextQuick_ScreenWidth = ScreenWidth;
+    _ImmTextQuick_ScreenHeight = ScreenHeight;
+    _ImmTextQuick_Color = Color;
+    _ImmTextQuick_BgColor = BgColor;
+    _ImmTextQuick_RenderUnit = RenderUnit;
+    _ImmTextQuick_Arena = Arena;
 }
 
 void
 ImmText_DrawQuickString(const char *String)
 {
-    ImmText_DrawString(String, QD_Font,
-                       QD_CurrentX, QD_CurrentY, QD_ScreenWidth, QD_ScreenHeight,
-                       Vec4(QD_Color, 1), true, QD_BgColor, QD_RenderUnit, QD_Arena);
+    ImmText_DrawString(String, _ImmTextQuick_Font,
+                       _ImmTextQuick_CurrentX, _ImmTextQuick_CurrentY, _ImmTextQuick_ScreenWidth, _ImmTextQuick_ScreenHeight,
+                       Vec4(_ImmTextQuick_Color, 1), true, _ImmTextQuick_BgColor, _ImmTextQuick_RenderUnit, _ImmTextQuick_Arena);
 
-    QD_CurrentY += QD_Font->Height;
+    _ImmTextQuick_CurrentY += _ImmTextQuick_Font->Height;
 }
 
 void
 ImmText_ResetQuickDraw()
 {
-    QD_CurrentX = QD_StartingX;
-    QD_CurrentY = QD_StartingY;
+    _ImmTextQuick_CurrentX = _ImmTextQuick_StartingX;
+    _ImmTextQuick_CurrentY = _ImmTextQuick_StartingY;
 }
