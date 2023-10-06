@@ -28,9 +28,13 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
     polyhedron *Polyhedron = MemoryArena_PushStruct(Arena, polyhedron);
     *Polyhedron = {};
 
+    //
+    // NOTE: 1. Deduplicate vertices and save into polyhedron vertex storage.
+    //
     Polyhedron->Vertices = MemoryArena_PushArray(Arena, VertexCount, vec3);
     u32 UniqueVertexCount = 0;
 
+    // NOTE: Store the pointers to polyhedron vertices in the original order (and duplication) to be able to use ImportedIndices.
     vec3 **OrderedVertexPtrs = MemoryArena_PushArray(TransientArena, VertexCount, vec3 *);
 
     for (u32 VertexIndex = 0;
@@ -62,18 +66,21 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
         }
     }
     
+    Assert(UniqueVertexCount <= VertexCount);
     Polyhedron->VertexCount = UniqueVertexCount;
-    MemoryArena_ResizePreviousPushArray(Arena, Polyhedron->VertexCount, vec3 *);
+    MemoryArena_ResizePreviousPushArray(Arena, Polyhedron->VertexCount, vec3);
 
     u32 TriangleCount = IndexCount / 3;
 
+    //
+    // NOTE: 2. Process each triangle to make a table of unique normals and correspondent edges.
+    //
     struct temp_edge
     {
         vec3 *PointA;
         vec3 *PointB;
 
         b32 IsInnerEdge;
-        b32 IsDuplicate;
 
         edge *PolyhedronEdgePtr;
 
@@ -89,9 +96,12 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
          TriangleIndex < TriangleCount;
          ++TriangleIndex)
     {
-        vec3 *A = Polyhedron->Vertices + (TriangleIndex*3+0);
-        vec3 *B = Polyhedron->Vertices + (TriangleIndex*3+1);
-        vec3 *C = Polyhedron->Vertices + (TriangleIndex*3+2);
+        vec3 *A = OrderedVertexPtrs[ImportedIndices[TriangleIndex*3+0]];
+        vec3 *B = OrderedVertexPtrs[ImportedIndices[TriangleIndex*3+1]];
+        vec3 *C = OrderedVertexPtrs[ImportedIndices[TriangleIndex*3+2]];
+
+        // NOTE: Should never have a degenerate triangle at this point (if so -- something is wrong with import).
+        Assert(!AreVecEqual(*A, *B) && !AreVecEqual(*B, *C) && !AreVecEqual(*A, *C));
         
         vec3 Normal = VecNormalize(VecCross(*B-*A, *C-*B));
 
@@ -111,11 +121,15 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
         temp_edge *TempEdgeHead = TempEdgeHeads + SearchTriangleIndex;
         if (SearchTriangleIndex == UniqueNormalCount)
         {
+            // NOTE: Duplicate normal wasn't found, initialize new slot.
             *TempEdgeHead = {};
+            EdgePerNormalCounts[SearchTriangleIndex] = 0;
+            UniqueNormals[SearchTriangleIndex] = Normal;
             ++UniqueNormalCount;
         }
 
         temp_edge *TempEdgeNode = TempEdgeHead;
+        temp_edge *TempEdgeTail = TempEdgeHead;
         while (TempEdgeNode)
         {
             if (!TempEdgeNode->PointA)
@@ -137,6 +151,7 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
                 }
             }
 
+            TempEdgeTail = TempEdgeNode;
             TempEdgeNode = TempEdgeNode->Next;
         }
 
@@ -144,29 +159,35 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
              TriangleEdgeIndex < 3;
              ++TriangleEdgeIndex)
         {
-            if (!TempEdgeHead->PointA)
+            if (!TempEdgeTail->PointA)
             {
-                *TempEdgeHead = TriangleEdges[TriangleEdgeIndex];
-                if (!TempEdgeHead->IsInnerEdge)
+                // NOTE: If the tail is not populated, it's the first edge being added in that slot.
+                // Just copy into the tail. That'll be the only node in the linked list.
+                *TempEdgeTail = TriangleEdges[TriangleEdgeIndex];
+                if (!TempEdgeTail->IsInnerEdge)
                 {
                     ++EdgePerNormalCounts[SearchTriangleIndex];
                 }
                 
                 continue;
             }
-            
-            temp_edge *OldHead = TempEdgeHead;
-            TempEdgeHead = MemoryArena_PushStruct(TransientArena, temp_edge);
-            *TempEdgeHead = TriangleEdges[TriangleEdgeIndex];
-            if (!TempEdgeHead->IsInnerEdge)
+
+            temp_edge *NewNode = MemoryArena_PushStruct(TransientArena, temp_edge);
+            *NewNode = TriangleEdges[TriangleEdgeIndex];
+            if (!NewNode->IsInnerEdge)
             {
                 ++EdgePerNormalCounts[SearchTriangleIndex];
             }
 
-            TempEdgeHead->Next = OldHead;
+            TempEdgeTail->Next = NewNode;
+            TempEdgeTail = NewNode;
         }
     }
 
+    //
+    // NOTE: 3. Copy (polyhedron) unique edges into polyhedron storage.
+    // Save pointers to the polyhedron edge storage in the temp edges, to preserve the link between polygons and edges.
+    //
     Polyhedron->Edges = MemoryArena_PushArray(Arena, TriangleCount * 3, edge);
 
     u32 UniqueEdgeCount = 0;
@@ -213,6 +234,10 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
     Polyhedron->FaceCount = UniqueNormalCount;
     Polyhedron->Faces = MemoryArena_PushArray(Arena, Polyhedron->FaceCount, polygon);
 
+    //
+    // NOTE: 4. Process polyhedron faces saving polygon plane information, pointers to edges in polyhedron storage,
+    // pointers to vertices in polyhedron storage.
+    //
     vec3 *Normal = UniqueNormals;
     temp_edge *TempEdgeHead = TempEdgeHeads;
     i32 *EdgePerNormalCount = EdgePerNormalCounts;
