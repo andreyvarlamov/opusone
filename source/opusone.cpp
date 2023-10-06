@@ -8,6 +8,7 @@
 #include "opusone_render.h"
 #include "opusone_animation.h"
 #include "opusone_immtext.h"
+#include "opusone_collision.h"
 
 #include <cstdio>
 #include <glad/glad.h>
@@ -118,7 +119,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 case COLLISION_TYPE_POLYHEDRON_SET:
                 {
                     imported_mesh *ImportedMesh = Blueprint->ImportedModel->Meshes;
-                    polyhedron *Polyhedron = ComputePolyhedronFromVertices(&GameState->WorldArena,
+                    polyhedron *Polyhedron = ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
                                                                            ImportedMesh->VertexPositions, ImportedMesh->VertexCount,
                                                                            ImportedMesh->Indices, ImportedMesh->IndexCount);
 

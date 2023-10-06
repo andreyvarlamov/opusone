@@ -290,6 +290,13 @@ IsZeroVector(vec3 Vector)
             (AbsF(Vector.Z) <= FLT_EPSILON));
 }
 
+internal inline b32
+AreVecEqual(vec3 A, vec3 B)
+{
+    b32 Result = IsZeroVector(A - B);
+    return Result;
+}
+
 internal inline vec3
 VecSphericalToCartesian(f32 Theta, f32 Phi)
 {
@@ -1040,5 +1047,7 @@ Mat4GetFullTransform(vec3 Position, quat Rotation, vec3 Scale)
     mat4 Result = TranslationTransform * RotationTransform * ScaleTransform;
     return Result;
 }
+
+
 
 #endif

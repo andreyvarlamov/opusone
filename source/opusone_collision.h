@@ -74,6 +74,7 @@ union collision_geometry
 };
 
 polyhedron *
-ComputePolyhedronFromVertices(memory_arena *Arena, vec3 *ImportedVertices, u32 VertexCount, i32 *ImportedIndices, u32 IndexCount);
+ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
+                              vec3 *ImportedVertices, u32 VertexCount, i32 *ImportedIndices, u32 IndexCount);
 
 #endif

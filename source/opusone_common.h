@@ -276,12 +276,14 @@ struct memory_arena
     u8 *Base;
     size_t Used;
     size_t PrevUsed;
+    size_t FrozenUsed;
+    size_t FrozenPrevUsed;
 };
 
 inline memory_arena
 MemoryArena(u8 *Base, size_t Size)
 {
-    memory_arena Arena {};
+    memory_arena Arena = {};
     
     Arena.Size = Size;
     Arena.Base = Base;
@@ -294,6 +296,7 @@ MemoryArena_PushSize_(memory_arena *Arena, size_t Size)
 {
     Assert((Arena->Used + Size) <= Arena->Size);
     void *Result = Arena->Base + Arena->Used;
+    Arena->PrevUsed = Arena->Used;
     Arena->Used += Size;
     return Result;
 }
@@ -314,10 +317,17 @@ MemoryArena_PushSizeAndZero_(memory_arena *Arena, size_t Size)
     return Base;
 }
 
+inline void
+MemoryArena_ResizePreviousPushArray_(memory_arena *Arena, size_t Size)
+{
+    Arena->Used = Arena->PrevUsed + Size;
+}
+
 #define MemoryArena_PushStruct(Arena, type) (type *) MemoryArena_PushSize_(Arena, sizeof(type))
 #define MemoryArena_PushArray(Arena, Count, type) (type *) MemoryArena_PushSize_(Arena, Count * sizeof(type))
 #define MemoryArena_PushBytes(Arena, ByteCount) (u8 *) MemoryArena_PushSize_(Arena, ByteCount)
 #define MemoryArena_PushArrayAndZero(Arena, Count, type) (type *) MemoryArena_PushSizeAndZero_(Arena, Count * sizeof(type))
+#define MemoryArena_ResizePreviousPushArray(Arena, Count, type) MemoryArena_ResizePreviousPushArray_(Arena, Count * sizeof(type))
 
 inline memory_arena
 MemoryArenaNested(memory_arena *Arena, size_t Size)
@@ -329,20 +339,18 @@ MemoryArenaNested(memory_arena *Arena, size_t Size)
 inline void
 MemoryArena_Freeze(memory_arena *Arena)
 {
-    if (Arena->PrevUsed == 0)
-    {
-        Arena->PrevUsed = Arena->Used;
-    }
+    Assert(Arena->FrozenUsed == 0);
+    Arena->FrozenUsed = Arena->Used;
+    Arena->FrozenPrevUsed = Arena->PrevUsed;
 }
 
 inline void
 MemoryArena_Unfreeze(memory_arena *Arena)
 {
-    if (Arena->PrevUsed != 0)
-    {
-        Arena->Used = Arena->PrevUsed;
-        Arena->PrevUsed = 0;
-    }
+    Arena->Used = Arena->FrozenUsed;
+    Arena->PrevUsed = Arena->FrozenPrevUsed;
+    Arena->FrozenUsed = 0;
+    Arena->FrozenPrevUsed = 0;
 }
 
 inline void
@@ -350,6 +358,8 @@ MemoryArena_Reset(memory_arena *Arena)
 {
     Arena->Used = 0;
     Arena->PrevUsed = 0;
+    Arena->FrozenUsed = 0;
+    Arena->FrozenPrevUsed = 0;
 }
 
 #endif
