@@ -65,6 +65,8 @@ struct game_state
     u32 PlayerWorldInstanceID;
 
     b32 DebugCollisions;
+
+    polyhedron *TestPolyhedron;
 };
 
 #endif

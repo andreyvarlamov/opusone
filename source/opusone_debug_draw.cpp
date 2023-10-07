@@ -99,7 +99,7 @@ DD_DrawVector(render_unit *RenderUnit, vec3 A, vec3 B, vec3 AColor, vec3 BColor,
     Marker->StartingIndex = RenderUnit->IndexCount;
     Marker->IndexCount = IndexCount;
     Marker->StateD.Debug.LineWidth = LineWidth;
-    Marker->StateD.Debug.IsOverlay = true;
+    // Marker->StateD.Debug.IsOverlay = true;
 
     void *AttribData[16] = {};
     u32 AttribCount = 0;
@@ -134,7 +134,7 @@ DD_DrawPoint(render_unit *RenderUnit, vec3 Point, vec3 Color, f32 PointSize)
     Marker->StartingIndex = RenderUnit->IndexCount;
     Marker->IndexCount = IndexCount;
     Marker->StateD.Debug.PointSize = PointSize;
-    Marker->StateD.Debug.IsOverlay = true;
+    // Marker->StateD.Debug.IsOverlay = true;
     Marker->StateD.Debug.IsPointMode = true;
 
     void *AttribData[16] = {};
@@ -202,6 +202,12 @@ void
 DD_InitializeQuickDraw(render_unit *RenderUnit)
 {
     _DDQuick_RenderUnit = RenderUnit;
+}
+
+void
+DD_DrawQuickPoint(vec3 Point, vec3 Color)
+{
+    DD_DrawPoint(_DDQuick_RenderUnit, Point, Color, 5.0f);
 }
 
 void

@@ -119,9 +119,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 case COLLISION_TYPE_POLYHEDRON_SET:
                 {
                     imported_mesh *ImportedMesh = Blueprint->ImportedModel->Meshes;
-                    polyhedron *Polyhedron = ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
-                                                                           ImportedMesh->VertexPositions, ImportedMesh->VertexCount,
-                                                                           ImportedMesh->Indices, ImportedMesh->IndexCount);
+                    GameState->TestPolyhedron = ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
+                                                                              ImportedMesh->VertexPositions, ImportedMesh->VertexCount,
+                                                                              ImportedMesh->Indices, ImportedMesh->IndexCount);
 
                     Noop;
                 } break;
@@ -487,6 +487,36 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     // NOTE: Game logic update
     //
     // GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
+
+    edge *EdgeCursor = GameState->TestPolyhedron->Edges;
+    for (u32 TestPolyhedronEdgeIndex = 0;
+         TestPolyhedronEdgeIndex < GameState->TestPolyhedron->EdgeCount;
+         ++TestPolyhedronEdgeIndex, ++EdgeCursor)
+    {
+        DD_DrawQuickVector(*EdgeCursor->A, *EdgeCursor->B, Vec3(1,0,1));
+    }
+    vec3 *VertCursor = GameState->TestPolyhedron->Vertices;
+    for (u32 TestPolyhedronVertIndex = 0;
+         TestPolyhedronVertIndex < GameState->TestPolyhedron->VertexCount;
+         ++TestPolyhedronVertIndex, ++VertCursor)
+    {
+        DD_DrawQuickPoint(*VertCursor, Vec3(1,0,0));
+    }
+    polygon *FaceCursor = GameState->TestPolyhedron->Faces;
+    for (u32 TestPolyhedronFaceIndex = 0;
+         TestPolyhedronFaceIndex < GameState->TestPolyhedron->FaceCount;
+         ++TestPolyhedronFaceIndex, ++FaceCursor)
+    {
+        vec3 FaceCentroid = Vec3();
+        for (u32 VertIndex = 0;
+             VertIndex < FaceCursor->VertexCount;
+             ++VertIndex)
+        {
+            FaceCentroid += *FaceCursor->Vertices[VertIndex];
+        }
+        FaceCentroid /= (f32) FaceCursor->VertexCount;
+        DD_DrawQuickVector(FaceCentroid, FaceCentroid + 0.25f * FaceCursor->Plane.Normal, Vec3(1,1,1));
+    }
 
     world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
     world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;

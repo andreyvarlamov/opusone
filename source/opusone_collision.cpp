@@ -3,13 +3,31 @@
 #include "opusone_common.h"
 #include "opusone_linmath.h"
 
-inline b32
-AreEdgesEqual(vec3 Edge1A, vec3 Edge1B, vec3 Edge2A, vec3 Edge2B)
+b32
+ValidateEdgesUnique(memory_arena *TransientArena, edge *Edges, u32 EdgeCount)
 {
-    b32 Result = ((AreVecEqual(Edge1A, Edge2A) && AreVecEqual(Edge1B, Edge2B)) ||
-                  (AreVecEqual(Edge1A, Edge2B) && AreVecEqual(Edge1B, Edge2A)));
+    edge *EdgeScratch = MemoryArena_PushArray(TransientArena, EdgeCount, edge);
+    u32 AddedToScratch = 0;
 
-    return Result;
+    for (u32 EdgeIndex = 0;
+         EdgeIndex < EdgeCount;
+         ++EdgeIndex)
+    {
+        for (u32 InnerIndex = 0;
+             InnerIndex < AddedToScratch;
+             ++InnerIndex)
+        {
+            if ((Edges[EdgeIndex].A == EdgeScratch[InnerIndex].A && Edges[EdgeIndex].B == EdgeScratch[InnerIndex].B) ||
+                (Edges[EdgeIndex].A == EdgeScratch[InnerIndex].B && Edges[EdgeIndex].B == EdgeScratch[InnerIndex].A))
+            {
+                return false;
+            }
+        }
+
+        EdgeScratch[AddedToScratch++] = Edges[EdgeIndex];
+    }
+
+    return true;
 }
 
 polyhedron *
@@ -141,8 +159,10 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
                  TriangleEdgeIndex < 3;
                  ++TriangleEdgeIndex)
             {
-                if (AreEdgesEqual(*TriangleEdges[TriangleEdgeIndex].PointA, *TriangleEdges[TriangleEdgeIndex].PointB,
-                                  *TempEdgeNode->PointA, *TempEdgeNode->PointB))
+                if ((TriangleEdges[TriangleEdgeIndex].PointA == TempEdgeNode->PointA &&
+                     TriangleEdges[TriangleEdgeIndex].PointB == TempEdgeNode->PointB) ||
+                    (TriangleEdges[TriangleEdgeIndex].PointA == TempEdgeNode->PointB &&
+                     TriangleEdges[TriangleEdgeIndex].PointB == TempEdgeNode->PointA))
                 {
                     TriangleEdges[TriangleEdgeIndex].IsInnerEdge = true;
                     TempEdgeNode->IsInnerEdge = true;
@@ -198,7 +218,7 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
         temp_edge *TempEdgeNode = TempEdgeHeads + UniqueNormalIndex;
         while (TempEdgeNode)
         {
-            if (!TempEdgeNode->PolyhedronEdgePtr)
+            if (!TempEdgeNode->IsInnerEdge && !TempEdgeNode->PolyhedronEdgePtr)
             {
                 edge *PolyhedronEdge = Polyhedron->Edges + UniqueEdgeCount++;
                 PolyhedronEdge->A = TempEdgeNode->PointA;
@@ -213,12 +233,12 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
                     temp_edge *TestTempEdgeNode = TempEdgeHeads + NormalInnerIndex;
                     while (TestTempEdgeNode)
                     {
-                        if (AreEdgesEqual(*TempEdgeNode->PointA, *TempEdgeNode->PointB,
-                                          *TestTempEdgeNode->PointA, *TestTempEdgeNode->PointB))
+                        if ((TempEdgeNode->PointA == TestTempEdgeNode->PointA && TempEdgeNode->PointB == TestTempEdgeNode->PointB) ||
+                            (TempEdgeNode->PointA == TestTempEdgeNode->PointB && TempEdgeNode->PointB == TestTempEdgeNode->PointA))
                         {
                             TestTempEdgeNode->PolyhedronEdgePtr = PolyhedronEdge;
                         }
-                
+                        
                         TestTempEdgeNode = TestTempEdgeNode->Next;
                     }
                 }
@@ -227,6 +247,8 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
             TempEdgeNode = TempEdgeNode->Next;
         }
     }
+
+    // Assert(ValidateEdgesUnique(TransientArena, Polyhedron->Edges, UniqueEdgeCount));
 
     Polyhedron->EdgeCount = UniqueEdgeCount;
     MemoryArena_ResizePreviousPushArray(Arena, Polyhedron->EdgeCount, edge);
