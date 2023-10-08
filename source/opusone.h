@@ -31,6 +31,8 @@ struct world_object_instance
     quat Rotation;
     vec3 Scale;
 
+    b32 IsInvisible;
+    
     animation_state *AnimationState;
 };
 
@@ -65,8 +67,6 @@ struct game_state
     u32 PlayerWorldInstanceID;
 
     b32 DebugCollisions;
-
-    polyhedron *TestPolyhedron;
 };
 
 #endif

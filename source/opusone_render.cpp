@@ -297,14 +297,16 @@ OpenGL_LoadTexture(u8 *ImageData, u32 Width, u32 Height, u32 Pitch, u32 BytesPer
 {
     // TODO: Handle different image data formats better
     Assert(Width * BytesPerPixel == Pitch);
-    Assert(BytesPerPixel == 4);
+    Assert(BytesPerPixel == 4 || BytesPerPixel == 3);
     
     u32 TextureID;
 
     glGenTextures(1, &TextureID);
     Assert(TextureID);
     glBindTexture(GL_TEXTURE_2D, TextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, ImageData);
+    u32 InternalFormat = (BytesPerPixel == 4 ? GL_RGBA8 : GL_RGB8);
+    u32 Format = (BytesPerPixel == 4 ? GL_RGBA : GL_RGB);
+    glTexImage2D(GL_TEXTURE_2D, 0, InternalFormat, Width, Height, 0, Format, GL_UNSIGNED_BYTE, ImageData);
     glGenerateMipmap(GL_TEXTURE_2D);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);

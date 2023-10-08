@@ -215,6 +215,12 @@ operator/(vec3 V, f32 S)
     return vec3 { V.X / S, V.Y / S, V.Z / S };
 }
 
+internal inline vec3
+operator/(f32 S, vec3 V)
+{
+    return vec3 { S / V.X, S / V.Y, S / V.Z };
+}
+
 internal inline vec3 &
 operator+=(vec3 &V0, vec3 V1)
 {
@@ -1048,6 +1054,28 @@ Mat4GetFullTransform(vec3 Position, quat Rotation, vec3 Scale)
     return Result;
 }
 
+internal inline vec3
+TransformPoint(vec3 Point, vec3 Position, quat Rotation, vec3 Scale)
+{
+    vec3 Result = Point;
+    
+    Result = Mat3GetScale(Scale) * Result;
+    Result = RotateVecByQuatSlow(Result, Rotation);
+    Result = Result + Position;
 
+    return Result;
+}
+
+internal inline vec3
+TransformNormal(vec3 Normal, quat Rotation, vec3 Scale)
+{
+    vec3 Result = Normal;
+
+    mat3 InverseScale = Mat3GetScale(1.0f / Scale);
+    Result = InverseScale * Result;
+    Result = RotateVecByQuatSlow(Result, Rotation);
+
+    return Result;
+}
 
 #endif

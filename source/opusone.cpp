@@ -14,7 +14,6 @@
 #include <glad/glad.h>
 
 #include "opusone_debug_draw.cpp"
-#include "opusone_geometry.cpp"
 
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameShouldQuit)
@@ -69,13 +68,15 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             SimpleString("resources/models/box_room/BoxRoom.gltf"),
             SimpleString("resources/models/adam/adam_new.gltf"),
             SimpleString("resources/models/complex_animation_keys/AnimationStudy2c.gltf"),
-            SimpleString("resources/models/container/Container.gltf")
+            SimpleString("resources/models/container/Container.gltf"),
+            SimpleString("resources/models/snowman/Snowman.gltf"),
         };
 
         collision_type BlueprintCollisionTypes[] = {
             COLLISION_TYPE_NONE,
             COLLISION_TYPE_AABB,
             COLLISION_TYPE_NONE,
+            COLLISION_TYPE_POLYHEDRON_SET,
             COLLISION_TYPE_POLYHEDRON_SET
         };
 
@@ -118,10 +119,22 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
                 case COLLISION_TYPE_POLYHEDRON_SET:
                 {
-                    imported_mesh *ImportedMesh = Blueprint->ImportedModel->Meshes;
-                    GameState->TestPolyhedron = ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
-                                                                              ImportedMesh->VertexPositions, ImportedMesh->VertexCount,
-                                                                              ImportedMesh->Indices, ImportedMesh->IndexCount);
+                    Blueprint->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
+                    polyhedron_set *PolyhedronSet = &Blueprint->CollisionGeometry->PolyhedronSet;
+                    PolyhedronSet->PolyhedronCount = Blueprint->ImportedModel->MeshCount;
+                    PolyhedronSet->Polyhedra = MemoryArena_PushArray(&GameState->WorldArena, PolyhedronSet->PolyhedronCount, polyhedron);
+                    
+                    imported_mesh *ImportedMeshCursor = Blueprint->ImportedModel->Meshes;
+                    polyhedron *PolyhedronCursor = PolyhedronSet->Polyhedra;
+                    for (u32 MeshIndex = 0;
+                         MeshIndex < Blueprint->ImportedModel->MeshCount;
+                         ++MeshIndex, ++ImportedMeshCursor, ++PolyhedronCursor)
+                    {
+                        ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
+                                                      ImportedMeshCursor->VertexPositions, ImportedMeshCursor->VertexCount,
+                                                      ImportedMeshCursor->Indices, ImportedMeshCursor->IndexCount,
+                                                      PolyhedronCursor);
+                    }
 
                     Noop;
                 } break;
@@ -231,6 +244,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
              BlueprintIndex < GameState->WorldObjectBlueprintCount;
              ++BlueprintIndex)
         {
+            if (BlueprintIndex == 5)
+            {
+                Noop;
+            }
+
             world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + BlueprintIndex;
             imported_model *ImportedModel = Blueprint->ImportedModel;
 
@@ -354,17 +372,18 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         // NOTE: Add instances of world object blueprints
         //
         world_object_instance Instances[] = {
-            world_object_instance { 1, Vec3(0.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 1, Vec3(20.0f,0.0f, 0.0f), Quat(Vec3(0.0f, 1.0f, 1.0f), ToRadiansF(45.0f)), Vec3(0.5f, 1.0f, 2.0f), 0 },
-            world_object_instance { 1, Vec3(0.0f,0.0f,-30.0f), Quat(Vec3(1.0f, 1.0f,1.0f), ToRadiansF(160.0f)), Vec3(1.0f, 1.0f, 5.0f), 0 },
-            world_object_instance { 2, Vec3(0.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 2, Vec3(-1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 2, Vec3(1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f), 0 },
-            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(Vec3(0,1,0), ToRadiansF(45.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f), 0 },
-            world_object_instance { 4, Vec3(-3.0f, 0.0f, 3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), 0 },
+            world_object_instance { 1, Vec3(0.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
+            world_object_instance { 1, Vec3(20.0f,0.0f, 0.0f), Quat(Vec3(0.0f, 1.0f, 1.0f), ToRadiansF(45.0f)), Vec3(0.5f, 1.0f, 2.0f) },
+            world_object_instance { 1, Vec3(0.0f,0.0f,-30.0f), Quat(Vec3(1.0f, 1.0f,1.0f), ToRadiansF(160.0f)), Vec3(1.0f, 1.0f, 5.0f) },
+            world_object_instance { 2, Vec3(0.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
+            world_object_instance { 2, Vec3(-1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
+            world_object_instance { 2, Vec3(1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
+            world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
+            world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f) },
+            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(Vec3(0,1,0), ToRadiansF(45.0f)), Vec3(1.0f, 1.0f, 1.0f) },
+            world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f) },
+            world_object_instance { 4, Vec3(-3.0f, 0.0f, 3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
+            world_object_instance { 5, Vec3(5.0f, 0.0f, 5.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), false, 0 },
         };
 
         GameState->WorldObjectInstanceCount = ArrayCount(Instances) + 1;
@@ -488,34 +507,63 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     //
     // GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
 
-    edge *EdgeCursor = GameState->TestPolyhedron->Edges;
-    for (u32 TestPolyhedronEdgeIndex = 0;
-         TestPolyhedronEdgeIndex < GameState->TestPolyhedron->EdgeCount;
-         ++TestPolyhedronEdgeIndex, ++EdgeCursor)
+    for (u32 InstanceIndex = 1;
+         InstanceIndex < GameState->WorldObjectInstanceCount;
+         ++InstanceIndex)
     {
-        DD_DrawQuickVector(*EdgeCursor->A, *EdgeCursor->B, Vec3(1,0,1));
-    }
-    vec3 *VertCursor = GameState->TestPolyhedron->Vertices;
-    for (u32 TestPolyhedronVertIndex = 0;
-         TestPolyhedronVertIndex < GameState->TestPolyhedron->VertexCount;
-         ++TestPolyhedronVertIndex, ++VertCursor)
-    {
-        DD_DrawQuickPoint(*VertCursor, Vec3(1,0,0));
-    }
-    polygon *FaceCursor = GameState->TestPolyhedron->Faces;
-    for (u32 TestPolyhedronFaceIndex = 0;
-         TestPolyhedronFaceIndex < GameState->TestPolyhedron->FaceCount;
-         ++TestPolyhedronFaceIndex, ++FaceCursor)
-    {
-        vec3 FaceCentroid = Vec3();
-        for (u32 VertIndex = 0;
-             VertIndex < FaceCursor->VertexCount;
-             ++VertIndex)
+        world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
+        world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
+
+        if (Blueprint->CollisionType == COLLISION_TYPE_POLYHEDRON_SET)
         {
-            FaceCentroid += *FaceCursor->Vertices[VertIndex];
+            Assert(Blueprint->CollisionGeometry);
+            
+            polyhedron_set *PolyhedronSet = &Blueprint->CollisionGeometry->PolyhedronSet;
+            Assert(PolyhedronSet->PolyhedronCount > 0);
+
+            for (u32 PolyhedronIndex = 0;
+                 PolyhedronIndex < PolyhedronSet->PolyhedronCount;
+                 ++PolyhedronIndex)
+            {
+                polyhedron *Polyhedron = PolyhedronSet->Polyhedra + PolyhedronIndex;
+
+                edge *EdgeCursor = Polyhedron->Edges;
+                for (u32 TestPolyhedronEdgeIndex = 0;
+                     TestPolyhedronEdgeIndex < Polyhedron->EdgeCount;
+                     ++TestPolyhedronEdgeIndex, ++EdgeCursor)
+                {
+                    DD_DrawQuickVector(TransformPoint(*EdgeCursor->A, Instance->Position, Instance->Rotation, Instance->Scale),
+                                       TransformPoint(*EdgeCursor->B, Instance->Position, Instance->Rotation, Instance->Scale),
+                                       Vec3(1,0,1));
+                }
+                vec3 *VertCursor = Polyhedron->Vertices; 
+                for (u32 TestPolyhedronVertIndex = 0;
+                     TestPolyhedronVertIndex < Polyhedron->VertexCount;
+                     ++TestPolyhedronVertIndex, ++VertCursor)
+                {
+                    DD_DrawQuickPoint(TransformPoint(*VertCursor, Instance->Position, Instance->Rotation, Instance->Scale),
+                                                     Vec3(1,0,0));
+                }
+                polygon *FaceCursor = Polyhedron->Faces;
+                for (u32 TestPolyhedronFaceIndex = 0;
+                     TestPolyhedronFaceIndex < Polyhedron->FaceCount;
+                     ++TestPolyhedronFaceIndex, ++FaceCursor)
+                {
+                    vec3 FaceCentroid = Vec3();
+                    for (u32 VertIndex = 0;
+                         VertIndex < FaceCursor->VertexCount;
+                         ++VertIndex)
+                    {
+                        FaceCentroid += TransformPoint(*FaceCursor->Vertices[VertIndex],
+                                                       Instance->Position, Instance->Rotation, Instance->Scale);
+                    }
+                    FaceCentroid /= (f32) FaceCursor->VertexCount;
+                    DD_DrawQuickVector(FaceCentroid,
+                                       FaceCentroid + 0.25f*TransformNormal(FaceCursor->Plane.Normal, Instance->Rotation, Instance->Scale),
+                                       Vec3(1,1,1));
+                }
+            }
         }
-        FaceCentroid /= (f32) FaceCursor->VertexCount;
-        DD_DrawQuickVector(FaceCentroid, FaceCentroid + 0.25f * FaceCursor->Plane.Normal, Vec3(1,1,1));
     }
 
     world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
@@ -921,6 +969,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                         {
                             // b32 ShouldLog = (InstanceID == 5);
                             world_object_instance *Instance = GameState->WorldObjectInstances + InstanceID;
+
+                            if (Instance->IsInvisible)
+                            {
+                                continue;
+                            }
 
                             mat4 ModelTransform = Mat4GetFullTransform(Instance->Position, Instance->Rotation, Instance->Scale);
 

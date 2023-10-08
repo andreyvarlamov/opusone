@@ -18,6 +18,13 @@ struct aabb
     vec3 Extents;
 };
 
+struct box
+{
+    vec3 Axes[3];
+    vec3 Center;
+    vec3 Extents;
+};
+
 struct sphere
 {
     vec3 Center;
@@ -73,8 +80,25 @@ union collision_geometry
     polyhedron_set PolyhedronSet;
 };
 
-polyhedron *
+void
 ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
-                              vec3 *ImportedVertices, u32 VertexCount, i32 *ImportedIndices, u32 IndexCount);
+                              vec3 *ImportedVertices, u32 VertexCount, i32 *ImportedIndices, u32 IndexCount,
+                              polyhedron *Out_Polyhedron);
+
+
+b32
+IsSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap);
+
+b32
+IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap, b32 *Out_OverlapAxisIsTriNormal);
+
+b32
+IsThereASeparatingAxisTriBoxFast(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, f32 *Out_TriNormalOverlap);
+
+b32
+IntersectRayAABB(vec3 P, vec3 D, vec3 BoxCenter, vec3 BoxExtents, f32 *Out_TMin, vec3 *Out_Q);
+
+b32
+IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, f32 *Out_W, f32 *Out_T);
 
 #endif
