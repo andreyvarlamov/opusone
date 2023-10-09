@@ -509,7 +509,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     //
     // GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
 
-#if 0
+#if 1
     for (u32 InstanceIndex = 1;
          InstanceIndex < GameState->WorldObjectInstanceCount;
          ++InstanceIndex)
@@ -680,7 +680,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     PlayerBox.Axes[1] = AABoxAxes[1];
     PlayerBox.Axes[2] = AABoxAxes[2];
 
-    u32 CollisionIterations = COLLISION_ITERATIONS + 1; // NOTE: Last iteration is only to check if allowed to move after prev iteration
+    u32 CollisionIterations = 4; // NOTE: Iteration #4 is only to check if iteration #3 solved collisions
     b32 PlayerTranslationWasAdjusted = false;
     b32 TranslationIsSafe = false;
     for (u32 IterationIndex = 0;
@@ -694,10 +694,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             break;
         }
 
-        PlayerBox.Center = PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center;
-
-        collision_contact Contacts[COLLISION_CONTACTS_PER_ITERATION] = {};
-        InitializeContactArray(Contacts, ArrayCount(Contacts));
+        f32 SmallestPenetrationDepth = FLT_MAX;
+        vec3 CollisionNormal = {};
+        u32 InstanceToResolveThisIteration = 0;
         
         b32 TranslationWillWorsenACollision = false;
         
@@ -742,11 +741,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                 AreSeparatedBoxPolyhedron(Polyhedron, &PlayerBox, &ThisCollisionNormal, &ThisPenetrationDepth);
 
                             if (!AreSeparated &&
-                                VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON)
+                                VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
+                                ThisPenetrationDepth < SmallestPenetrationDepth)
                             {
-                                TranslationWillWorsenACollision =
-                                    PopulateContactArray(ThisCollisionNormal, ThisPenetrationDepth, InstanceIndex,
-                                                         Contacts, ArrayCount(Contacts));
+                                SmallestPenetrationDepth = ThisPenetrationDepth;
+                                CollisionNormal =ThisCollisionNormal;
+                                TranslationWillWorsenACollision = true;
+                                InstanceToResolveThisIteration = InstanceIndex;
 
                                 edge *EdgeCursor = Polyhedron->Edges;
                                 for (u32 TestPolyhedronEdgeIndex = 0;
@@ -822,11 +823,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                         }
 
                         if (!SeparatingAxisFound &&
-                            VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON)
+                            VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
+                            ThisPenetrationDepth < SmallestPenetrationDepth)
                         {
-                            TranslationWillWorsenACollision =
-                                PopulateContactArray(ThisCollisionNormal, ThisPenetrationDepth, InstanceIndex,
-                                                     Contacts, ArrayCount(Contacts));
+                            SmallestPenetrationDepth = ThisPenetrationDepth;
+                            CollisionNormal = ThisCollisionNormal;
+                            TranslationWillWorsenACollision = true;
+                            InstanceToResolveThisIteration = InstanceIndex;
                         }
 
                         DD_DrawQuickAABox(Instance->Position + AABB->Center, AABB->Extents, SeparatingAxisFound ? Vec3(0,1,0) : Vec3(1,0,0));
@@ -857,70 +860,17 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 // then the translation is not safe, it will not be applied.
                 break;
             }
-
-            u32 ContactToResolve;
-            b32 FoundContactThatResolvesEverything = false;
-            for (ContactToResolve = 0;
-                 ContactToResolve < ArrayCount(Contacts);
-                 ++ContactToResolve)
-            {
-                collision_contact *Contact = Contacts + ContactToResolve;
-
-                vec3 Resolution = Contact->PenetrationDepth * Contact->Normal;
-
-                f32 PenetrationsIfResolved[COLLISION_CONTACTS_PER_ITERATION];
-                PenetrationsIfResolved[ContactToResolve] = 0.0f;
-
-                for (u32 ContactIndex = 0;
-                     ContactIndex < ArrayCount(Contacts);
-                     ++ContactIndex)
-                {
-                    if (ContactIndex != ContactToResolve)
-                    {
-                        collision_contact *TestContact = Contacts + ContactIndex;
-                        PenetrationsIfResolved[ContactIndex] = (TestContact->PenetrationDepth -
-                                                                VecDot(Resolution, TestContact->Normal));
-                    }
-                }
-
-                b32 ContactResolvesEverything = true;
-                for (u32 ContactIndex = 0;
-                     ContactIndex < ArrayCount(Contacts);
-                     ++ContactIndex)
-                {
-                    if (PenetrationsIfResolved[ContactIndex] > 0.0f)
-                    {
-                        ContactResolvesEverything = false;
-                        break;
-                    }
-                }
-
-                if (ContactResolvesEverything)
-                {
-                    FoundContactThatResolvesEverything = true;
-                    break;
-                }
-            }
-
-            if (!FoundContactThatResolvesEverything)
-            {
-                ContactToResolve = 0;
-            }
             
-            if (VecLengthSq(Contacts[ContactToResolve].Normal) > 1.1f || VecLengthSq(Contacts[ContactToResolve].Normal) < 0.9f)
-            {
-                Breakpoint;
-            }
-
-            vec3 CollidingTranslationComponentDir = -Contacts[ContactToResolve].Normal;
+            vec3 CollidingTranslationComponentDir = -CollisionNormal;
             f32 CollidingTranslationComponentMag = AbsF(VecDot(CollidingTranslationComponentDir, PlayerTranslation));
             vec3 CollidingTranslationComponent = CollidingTranslationComponentMag * CollidingTranslationComponentDir;
 
             PlayerTranslation -= CollidingTranslationComponent;
+            PlayerBox.Center -= CollidingTranslationComponent;
 
-            DD_DrawQuickVector(PlayerInstance->Position, PlayerInstance->Position + Contacts[ContactToResolve].Normal, Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
+            DD_DrawQuickVector(PlayerInstance->Position, PlayerInstance->Position + CollisionNormal, Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
             ImmText_DrawQuickString(SimpleStringF("Collision: Iteration#%d: Instance#%d",
-                                                  IterationIndex, Contacts[ContactToResolve].InstanceIndex).D);
+                                                  IterationIndex, InstanceToResolveThisIteration).D);
         }
     }
 

@@ -511,8 +511,6 @@ AreSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOv
 {
     vec3 SmallestOverlapAxis = {};
     f32 SmallestOverlap = FLT_MAX;
-    vec3 SmallestFaceOverlapAxis = {};
-    f32 SmallestFaceOverlap = FLT_MAX;
     
     //
     // NOTE: 1. Check box face normals
