@@ -65,6 +65,8 @@ struct game_state
 
     f32 PlayerCameraYOffset;
     u32 PlayerWorldInstanceID;
+    vec3 PlayerVelocity;
+    b32 PlayerAirborne;
 
     b32 DebugCollisions;
 };

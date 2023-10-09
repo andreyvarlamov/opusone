@@ -509,7 +509,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     //
     // GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
 
-#if 1
+#if 0
     for (u32 InstanceIndex = 1;
          InstanceIndex < GameState->WorldObjectInstanceCount;
          ++InstanceIndex)
@@ -636,34 +636,60 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     {
         PlayerInstance->Rotation = Quat(Vec3(0,1,0), ToRadiansF(GameState->Camera.Theta + 180.0f));
     }
-    
-    vec3 PlayerTranslation = Vec3();
+
+    vec3 PlayerAcceleration = {};
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_W])
     {
-        PlayerTranslation.Z += 1.0f;
+        PlayerAcceleration.Z += 1.0f;
     }
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_S])
     {
-        PlayerTranslation.Z -= 1.0f;
+        PlayerAcceleration.Z -= 1.0f;
+        GameState->PlayerAirborne = false;
     }
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_A])
     {
-        PlayerTranslation.X += 1.0f;
+        PlayerAcceleration.X += 1.0f;
     }
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_D])
     {
-        PlayerTranslation.X -= 1.0f;
+        PlayerAcceleration.X -= 1.0f;
     }
+#if 0
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_LSHIFT])
     {
-        PlayerTranslation.Y -= 1.0f;
+        PlayerAcceleration.Y -= 1.0f;
     }
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_SPACE])
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_LCTRL])
     {
-        PlayerTranslation.Y += 1.0f;
+        PlayerAcceleration.Y += 1.0f;
     }
-    PlayerTranslation = RotateVecByQuatSlow(VecNormalize(PlayerTranslation), PlayerInstance->Rotation);
-    PlayerTranslation = 5.0f * GameInput->DeltaTime * PlayerTranslation;
+#endif
+    PlayerAcceleration = 300.0f * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), PlayerInstance->Rotation);
+
+    PlayerAcceleration.Y = -100.0f;
+    
+    if (GameInput->CurrentKeyStates[SDL_SCANCODE_SPACE] && !GameState->PlayerAirborne)
+    {
+        GameState->PlayerAirborne = true;
+        GameState->PlayerVelocity.Y = 100.0f;
+    }
+
+    vec3 Drag = 50.0f * GameState->PlayerVelocity;
+    PlayerAcceleration -= Drag;
+
+    vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
+                              GameState->PlayerVelocity * GameInput->DeltaTime);
+
+    GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
+
+    ImmText_DrawQuickString(SimpleStringF("Player velocity: {%0.3f,%0.3f,%0.3f}",
+                                          GameState->PlayerVelocity.X, GameState->PlayerVelocity.Y, GameState->PlayerVelocity.Z).D);
+
+    ImmText_DrawQuickString(SimpleStringF("Player position: {%0.3f,%0.3f,%0.3f}",
+                                          PlayerInstance->Position.X, PlayerInstance->Position.Y, PlayerInstance->Position.Z).D);
+
+    
     // TODO: Make this work with collisions
     if (GameInput->CurrentKeyStates[SDL_SCANCODE_LCTRL])
     {
@@ -671,16 +697,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
     
     Assert(PlayerBlueprint->CollisionGeometry);
-    aabb *PlayerAABB = &PlayerBlueprint->CollisionGeometry->AABB;
-    vec3 AABoxAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
-    box PlayerBox = {};
-    PlayerBox.Center = PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center;
-    PlayerBox.Extents = PlayerAABB->Extents;
-    PlayerBox.Axes[0] = AABoxAxes[0];
-    PlayerBox.Axes[1] = AABoxAxes[1];
-    PlayerBox.Axes[2] = AABoxAxes[2];
+    vec3 CardinalAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
 
-    u32 CollisionIterations = 4; // NOTE: Iteration #4 is only to check if iteration #3 solved collisions
+    u32 CollisionIterations = COLLISION_ITERATIONS + 1; // NOTE: Last iteration is only to check if can move after prev iteration
     b32 PlayerTranslationWasAdjusted = false;
     b32 TranslationIsSafe = false;
     for (u32 IterationIndex = 0;
@@ -693,6 +712,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             TranslationIsSafe = true;
             break;
         }
+
+        box PlayerBox = {};
+        PlayerBox.Center = PlayerInstance->Position + PlayerTranslation + PlayerBlueprint->CollisionGeometry->AABB.Center;
+        PlayerBox.Extents = PlayerBlueprint->CollisionGeometry->AABB.Extents;
+        PlayerBox.Axes[0] = CardinalAxes[0];
+        PlayerBox.Axes[1] = CardinalAxes[1];
+        PlayerBox.Axes[2] = CardinalAxes[2];
 
         f32 SmallestPenetrationDepth = FLT_MAX;
         vec3 CollisionNormal = {};
@@ -793,9 +819,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                              AxisIndex < 3;
                              ++AxisIndex)
                         {
-                            f32 PlayerCenter = PlayerInstance->Position.E[AxisIndex] + PlayerTranslation.E[AxisIndex] + PlayerAABB->Center.E[AxisIndex];
-                            f32 PlayerMin = PlayerCenter - PlayerAABB->Extents.E[AxisIndex];
-                            f32 PlayerMax = PlayerCenter + PlayerAABB->Extents.E[AxisIndex];
+                            f32 PlayerCenter = PlayerBox.Center.E[AxisIndex];
+                            f32 PlayerMin = PlayerCenter - PlayerBox.Extents.E[AxisIndex];
+                            f32 PlayerMax = PlayerCenter + PlayerBox.Extents.E[AxisIndex];
 
                             f32 OtherCenter = Instance->Position.E[AxisIndex] + AABB->Center.E[AxisIndex];
                             f32 OtherMin = OtherCenter - AABB->Extents.E[AxisIndex];
@@ -860,13 +886,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 // then the translation is not safe, it will not be applied.
                 break;
             }
-            
+
             vec3 CollidingTranslationComponentDir = -CollisionNormal;
             f32 CollidingTranslationComponentMag = AbsF(VecDot(CollidingTranslationComponentDir, PlayerTranslation));
             vec3 CollidingTranslationComponent = CollidingTranslationComponentMag * CollidingTranslationComponentDir;
 
             PlayerTranslation -= CollidingTranslationComponent;
-            PlayerBox.Center -= CollidingTranslationComponent;
 
             DD_DrawQuickVector(PlayerInstance->Position, PlayerInstance->Position + CollisionNormal, Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
             ImmText_DrawQuickString(SimpleStringF("Collision: Iteration#%d: Instance#%d",
@@ -880,7 +905,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         SetThirdPersonCameraTarget(&GameState->Camera, PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0));
     }
 
-    DD_DrawQuickAABox(PlayerInstance->Position + PlayerAABB->Center, PlayerAABB->Extents,
+    DD_DrawQuickAABox(PlayerInstance->Position + PlayerBlueprint->CollisionGeometry->AABB.Center,
+                      PlayerBlueprint->CollisionGeometry->AABB.Extents,
                       PlayerTranslationWasAdjusted ? Vec3(1,0,0) : Vec3(0,1,0));
 
     //

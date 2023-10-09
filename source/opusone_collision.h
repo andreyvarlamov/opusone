@@ -4,6 +4,8 @@
 #include "opusone_common.h"
 #include "opusone_linmath.h"
 
+#define COLLISION_ITERATIONS 3
+
 enum collision_type
 {
     COLLISION_TYPE_NONE,
