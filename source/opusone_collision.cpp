@@ -17,8 +17,8 @@ ValidateEdgesUnique(memory_arena *TransientArena, edge *Edges, u32 EdgeCount)
              InnerIndex < AddedToScratch;
              ++InnerIndex)
         {
-            if ((Edges[EdgeIndex].A == EdgeScratch[InnerIndex].A && Edges[EdgeIndex].B == EdgeScratch[InnerIndex].B) ||
-                (Edges[EdgeIndex].A == EdgeScratch[InnerIndex].B && Edges[EdgeIndex].B == EdgeScratch[InnerIndex].A))
+            if ((Edges[EdgeIndex].AIndex == EdgeScratch[InnerIndex].AIndex && Edges[EdgeIndex].BIndex == EdgeScratch[InnerIndex].BIndex) ||
+                (Edges[EdgeIndex].AIndex == EdgeScratch[InnerIndex].BIndex && Edges[EdgeIndex].BIndex == EdgeScratch[InnerIndex].AIndex))
             {
                 return false;
             }
@@ -32,15 +32,15 @@ ValidateEdgesUnique(memory_arena *TransientArena, edge *Edges, u32 EdgeCount)
 
 void
 ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
-                              vec3 *ImportedVertices, u32 VertexCount, i32 *ImportedIndices, u32 IndexCount,
+                              vec3 *ImportedVertices, u32 ImportedVertexCount, i32 *ImportedIndices, u32 ImportedIndexCount,
                               polyhedron *Out_Polyhedron)
 {
     Assert(Arena);
     Assert(ImportedVertices);
-    Assert(VertexCount > 0);
+    Assert(ImportedVertexCount > 0);
     Assert(ImportedIndices);
-    Assert(IndexCount > 0);
-    Assert(IndexCount % 3 == 0);
+    Assert(ImportedIndexCount > 0);
+    Assert(ImportedIndexCount % 3 == 0);
     Assert(Out_Polyhedron);
 
     MemoryArena_Freeze(TransientArena);
@@ -51,28 +51,28 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
     //
     // NOTE: 1. Deduplicate vertices and save into polyhedron vertex storage.
     //
-    Polyhedron->Vertices = MemoryArena_PushArray(Arena, VertexCount, vec3);
-    u32 UniqueVertexCount = 0;
+    Polyhedron->Vertices = MemoryArena_PushArray(Arena, ImportedVertexCount, vec3);
+    u32 PolyhedronVertexCount = 0;
 
-    // NOTE: Store the pointers to polyhedron vertices in the original order (and duplication) to be able to use ImportedIndices.
-    vec3 **OrderedVertexPtrs = MemoryArena_PushArray(TransientArena, VertexCount, vec3 *);
+    // NOTE: Store the indices of polyhedron vertices in the original order (and duplication) to be able to use ImportedIndices.
+    u32 *PolyhedronVertexIndices = MemoryArena_PushArray(TransientArena, ImportedVertexCount, u32);
 
-    for (u32 VertexIndex = 0;
-         VertexIndex < VertexCount;
-         ++VertexIndex)
+    for (u32 ImportedVertexIndex = 0;
+         ImportedVertexIndex < ImportedVertexCount;
+         ++ImportedVertexIndex)
     {
-        vec3 *ImportedVertex = ImportedVertices + VertexIndex;
+        vec3 *ImportedVertex = ImportedVertices + ImportedVertexIndex;
 
         b32 DuplicateFound = false;
-        for (u32 UniqueVertexIndex = 0;
-             UniqueVertexIndex < UniqueVertexCount;
-             ++UniqueVertexIndex)
+        for (u32 PolyhedronVertexIndex = 0;
+             PolyhedronVertexIndex < PolyhedronVertexCount;
+             ++PolyhedronVertexIndex)
         {
-            vec3 *PolyhedronVertex = Polyhedron->Vertices + UniqueVertexIndex;
+            vec3 *PolyhedronVertex = Polyhedron->Vertices + PolyhedronVertexIndex;
             
             if (AreVecEqual(*ImportedVertex, *PolyhedronVertex))
             {
-                OrderedVertexPtrs[VertexIndex] = PolyhedronVertex;
+                PolyhedronVertexIndices[ImportedVertexIndex] = PolyhedronVertexIndex;
                 DuplicateFound = true;
                 break;
             }
@@ -80,29 +80,30 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
 
         if (!DuplicateFound)
         {
-            vec3 *PolyhedronVertex = Polyhedron->Vertices + UniqueVertexCount++;
-            *PolyhedronVertex = *ImportedVertex;
-            OrderedVertexPtrs[VertexIndex] = PolyhedronVertex;
+            Polyhedron->Vertices[PolyhedronVertexCount] = *ImportedVertex;
+            PolyhedronVertexIndices[ImportedVertexIndex] = PolyhedronVertexCount;
+            ++PolyhedronVertexCount;
         }
     }
     
-    Assert(UniqueVertexCount <= VertexCount);
-    Polyhedron->VertexCount = UniqueVertexCount;
+    Assert(PolyhedronVertexCount <= ImportedVertexCount);
+    Polyhedron->VertexCount = PolyhedronVertexCount;
     MemoryArena_ResizePreviousPushArray(Arena, Polyhedron->VertexCount, vec3);
 
-    u32 TriangleCount = IndexCount / 3;
+    u32 TriangleCount = ImportedIndexCount / 3;
 
     //
     // NOTE: 2. Process each triangle to make a table of unique normals and correspondent edges.
     //
     struct temp_edge
     {
-        vec3 *PointA;
-        vec3 *PointB;
+        u32 AIndex;
+        u32 BIndex;
 
         b32 IsInnerEdge;
 
-        edge *PolyhedronEdgePtr;
+        u32 PolyhedronEdgeIndex;
+        b32 IsDuplicate;
 
         temp_edge *Next;
     };
@@ -116,16 +117,24 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
          TriangleIndex < TriangleCount;
          ++TriangleIndex)
     {
-        vec3 *A = OrderedVertexPtrs[ImportedIndices[TriangleIndex*3+0]];
-        vec3 *B = OrderedVertexPtrs[ImportedIndices[TriangleIndex*3+1]];
-        vec3 *C = OrderedVertexPtrs[ImportedIndices[TriangleIndex*3+2]];
+        u32 TriAImportedIndex = ImportedIndices[TriangleIndex*3+0];
+        u32 TriBImportedIndex = ImportedIndices[TriangleIndex*3+1];
+        u32 TriCImportedIndex = ImportedIndices[TriangleIndex*3+2];
+        u32 TriAPolyhedronIndex = PolyhedronVertexIndices[TriAImportedIndex];
+        u32 TriBPolyhedronIndex = PolyhedronVertexIndices[TriBImportedIndex];
+        u32 TriCPolyhedronIndex = PolyhedronVertexIndices[TriCImportedIndex];
+        vec3 TriA = Polyhedron->Vertices[TriAPolyhedronIndex];
+        vec3 TriB = Polyhedron->Vertices[TriBPolyhedronIndex];
+        vec3 TriC = Polyhedron->Vertices[TriCPolyhedronIndex];
 
         // NOTE: Should never have a degenerate triangle at this point (if so -- something is wrong with import).
-        Assert(!AreVecEqual(*A, *B) && !AreVecEqual(*B, *C) && !AreVecEqual(*A, *C));
+        Assert(!AreVecEqual(TriA, TriB) && !AreVecEqual(TriB, TriC) && !AreVecEqual(TriA, TriC));
         
-        vec3 Normal = VecNormalize(VecCross(*B-*A, *C-*B));
+        vec3 Normal = VecNormalize(VecCross(TriB-TriA, TriC-TriB));
 
-        temp_edge TriangleEdges[3] = { { A, B }, { B, C }, { C, A } };
+        temp_edge TriangleEdges[3] = { { TriAPolyhedronIndex, TriBPolyhedronIndex },
+                                       { TriBPolyhedronIndex, TriCPolyhedronIndex },
+                                       { TriCPolyhedronIndex, TriAPolyhedronIndex } };
             
         u32 SearchTriangleIndex;
         for (SearchTriangleIndex = 0;
@@ -138,6 +147,7 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
             }
         }
 
+        b32 NewEdgeList = false;
         temp_edge *TempEdgeHead = TempEdgeHeads + SearchTriangleIndex;
         if (SearchTriangleIndex == UniqueNormalCount)
         {
@@ -146,50 +156,49 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
             EdgePerNormalCounts[SearchTriangleIndex] = 0;
             UniqueNormals[SearchTriangleIndex] = Normal;
             ++UniqueNormalCount;
+            
+            NewEdgeList = true;
         }
 
         temp_edge *TempEdgeNode = TempEdgeHead;
         temp_edge *TempEdgeTail = TempEdgeHead;
-        while (TempEdgeNode)
+        if (!NewEdgeList)
         {
-            if (!TempEdgeNode->PointA)
+            while (TempEdgeNode)
             {
-                break;
-            }
-            
-            for (u32 TriangleEdgeIndex = 0;
-                 TriangleEdgeIndex < 3;
-                 ++TriangleEdgeIndex)
-            {
-                if ((TriangleEdges[TriangleEdgeIndex].PointA == TempEdgeNode->PointA &&
-                     TriangleEdges[TriangleEdgeIndex].PointB == TempEdgeNode->PointB) ||
-                    (TriangleEdges[TriangleEdgeIndex].PointA == TempEdgeNode->PointB &&
-                     TriangleEdges[TriangleEdgeIndex].PointB == TempEdgeNode->PointA))
+                for (u32 TriangleEdgeIndex = 0;
+                     TriangleEdgeIndex < 3;
+                     ++TriangleEdgeIndex)
                 {
-                    TriangleEdges[TriangleEdgeIndex].IsInnerEdge = true;
-                    TempEdgeNode->IsInnerEdge = true;
-                    --EdgePerNormalCounts[SearchTriangleIndex];
-                    break;
+                    if ((TriangleEdges[TriangleEdgeIndex].AIndex == TempEdgeNode->AIndex &&
+                         TriangleEdges[TriangleEdgeIndex].BIndex == TempEdgeNode->BIndex) ||
+                        (TriangleEdges[TriangleEdgeIndex].AIndex == TempEdgeNode->BIndex &&
+                         TriangleEdges[TriangleEdgeIndex].BIndex == TempEdgeNode->AIndex))
+                    {
+                        TriangleEdges[TriangleEdgeIndex].IsInnerEdge = true;
+                        TempEdgeNode->IsInnerEdge = true;
+                        --EdgePerNormalCounts[SearchTriangleIndex];
+                        break;
+                    }
                 }
-            }
 
-            TempEdgeTail = TempEdgeNode;
-            TempEdgeNode = TempEdgeNode->Next;
+                TempEdgeTail = TempEdgeNode;
+                TempEdgeNode = TempEdgeNode->Next;
+            }
         }
 
         for (u32 TriangleEdgeIndex = 0;
              TriangleEdgeIndex < 3;
              ++TriangleEdgeIndex)
         {
-            if (!TempEdgeTail->PointA)
+            if (NewEdgeList)
             {
-                // NOTE: If the tail is not populated, it's the first edge being added in that slot.
-                // Just copy into the tail. That'll be the only node in the linked list.
                 *TempEdgeTail = TriangleEdges[TriangleEdgeIndex];
                 if (!TempEdgeTail->IsInnerEdge)
                 {
                     ++EdgePerNormalCounts[SearchTriangleIndex];
                 }
+                NewEdgeList = false;
                 
                 continue;
             }
@@ -212,7 +221,7 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
     //
     Polyhedron->Edges = MemoryArena_PushArray(Arena, TriangleCount * 3, edge);
 
-    u32 UniqueEdgeCount = 0;
+    u32 PolyhedronEdgeCount = 0;
     for (u32 UniqueNormalIndex = 0;
          UniqueNormalIndex < UniqueNormalCount-1;
          ++UniqueNormalIndex)
@@ -220,14 +229,15 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
         temp_edge *TempEdgeNode = TempEdgeHeads + UniqueNormalIndex;
         while (TempEdgeNode)
         {
-            if (!TempEdgeNode->IsInnerEdge && !TempEdgeNode->PolyhedronEdgePtr)
+            if (!TempEdgeNode->IsInnerEdge && !TempEdgeNode->IsDuplicate)
             {
-                edge *PolyhedronEdge = Polyhedron->Edges + UniqueEdgeCount++;
-                PolyhedronEdge->A = TempEdgeNode->PointA;
-                PolyhedronEdge->B = TempEdgeNode->PointB;
-                PolyhedronEdge->AB = *PolyhedronEdge->B - *PolyhedronEdge->A;
-                TempEdgeNode->PolyhedronEdgePtr = PolyhedronEdge;
-                
+                edge *PolyhedronEdge = Polyhedron->Edges + PolyhedronEdgeCount;
+                PolyhedronEdge->AIndex = TempEdgeNode->AIndex;
+                PolyhedronEdge->BIndex = TempEdgeNode->BIndex;
+                PolyhedronEdge->AB = (Polyhedron->Vertices[PolyhedronEdge->BIndex] -
+                                      Polyhedron->Vertices[PolyhedronEdge->AIndex]);
+                TempEdgeNode->PolyhedronEdgeIndex = PolyhedronEdgeCount;
+
                 for (u32 NormalInnerIndex = UniqueNormalIndex+1;
                      NormalInnerIndex <  UniqueNormalCount;
                      ++NormalInnerIndex)
@@ -235,24 +245,27 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
                     temp_edge *TestTempEdgeNode = TempEdgeHeads + NormalInnerIndex;
                     while (TestTempEdgeNode)
                     {
-                        if ((TempEdgeNode->PointA == TestTempEdgeNode->PointA && TempEdgeNode->PointB == TestTempEdgeNode->PointB) ||
-                            (TempEdgeNode->PointA == TestTempEdgeNode->PointB && TempEdgeNode->PointB == TestTempEdgeNode->PointA))
+                        if ((TempEdgeNode->AIndex == TestTempEdgeNode->AIndex && TempEdgeNode->BIndex == TestTempEdgeNode->BIndex) ||
+                            (TempEdgeNode->AIndex == TestTempEdgeNode->BIndex && TempEdgeNode->BIndex == TestTempEdgeNode->AIndex))
                         {
-                            TestTempEdgeNode->PolyhedronEdgePtr = PolyhedronEdge;
+                            TestTempEdgeNode->PolyhedronEdgeIndex = PolyhedronEdgeCount;
+                            TestTempEdgeNode->IsDuplicate = true;
                         }
                         
                         TestTempEdgeNode = TestTempEdgeNode->Next;
                     }
                 }
+
+                ++PolyhedronEdgeCount;
             }
 
             TempEdgeNode = TempEdgeNode->Next;
         }
     }
 
-    // Assert(ValidateEdgesUnique(TransientArena, Polyhedron->Edges, UniqueEdgeCount));
+    Assert(ValidateEdgesUnique(TransientArena, Polyhedron->Edges, PolyhedronEdgeCount));
 
-    Polyhedron->EdgeCount = UniqueEdgeCount;
+    Polyhedron->EdgeCount = PolyhedronEdgeCount;
     MemoryArena_ResizePreviousPushArray(Arena, Polyhedron->EdgeCount, edge);
 
     Polyhedron->FaceCount = UniqueNormalCount;
@@ -275,11 +288,11 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
         *Face = {};
 
         Face->Plane.Normal = *Normal;
-        Face->Plane.Distance = VecDot(*Normal, *TempEdgeHead->PointA);
+        Face->Plane.Distance = VecDot(*Normal, Polyhedron->Vertices[TempEdgeHead->AIndex]);
 
         Face->EdgeCount = *EdgePerNormalCount;
-        Face->Edges = MemoryArena_PushArray(Arena, Face->EdgeCount, edge *);
-        Face->Vertices = MemoryArena_PushArray(Arena, Face->EdgeCount * 2, vec3 *);
+        Face->EdgeIndices = MemoryArena_PushArray(Arena, Face->EdgeCount, u32);
+        Face->VertexIndices = MemoryArena_PushArray(Arena, Face->EdgeCount * 2, u32);
         u32 VerticesAdded = 0;
 
         temp_edge *TempEdgeNode = TempEdgeHead;
@@ -288,7 +301,7 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
         {
             if (!TempEdgeNode->IsInnerEdge)
             {
-                Face->Edges[FaceEdgeIndex++] = TempEdgeNode->PolyhedronEdgePtr;
+                Face->EdgeIndices[FaceEdgeIndex++] = TempEdgeNode->PolyhedronEdgeIndex;
 
                 b32 FoundA = false;
                 b32 FoundB = false;
@@ -297,12 +310,12 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
                      VertexIndex < VerticesAdded;
                      ++VertexIndex)
                 {
-                    if (Face->Vertices[VertexIndex] == TempEdgeNode->PointA)
+                    if (Face->VertexIndices[VertexIndex] == TempEdgeNode->AIndex)
                     {
                         FoundA = true;
                     }
 
-                    if (Face->Vertices[VertexIndex] == TempEdgeNode->PointB)
+                    if (Face->VertexIndices[VertexIndex] == TempEdgeNode->BIndex)
                     {
                         FoundB = true;
                     }
@@ -315,12 +328,12 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
                 
                 if (!FoundA)
                 {
-                    Face->Vertices[VerticesAdded++] = TempEdgeNode->PointA;
+                    Face->VertexIndices[VerticesAdded++] = TempEdgeNode->AIndex;
                 }
                 
                 if (!FoundB)
                 {
-                    Face->Vertices[VerticesAdded++] = TempEdgeNode->PointB;
+                    Face->VertexIndices[VerticesAdded++] = TempEdgeNode->BIndex;
                 }
             }
             
@@ -328,10 +341,113 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
         }
 
         Face->VertexCount = VerticesAdded;
-        MemoryArena_ResizePreviousPushArray(Arena, Face->VertexCount, vec3 *);
+        MemoryArena_ResizePreviousPushArray(Arena, Face->VertexCount, u32);
     }
 
     MemoryArena_Unfreeze(TransientArena);
+}
+
+polyhedron_set *
+CopyPolyhedronSet(memory_arena *Arena, polyhedron_set *Original)
+{
+    polyhedron_set *Copy = MemoryArena_PushStruct(Arena, polyhedron_set);
+
+    Copy->PolyhedronCount = Original->PolyhedronCount;
+    Copy->Polyhedra = MemoryArena_PushArray(Arena, Copy->PolyhedronCount, polyhedron);
+    
+    for (u32 PolyhedronIndex = 0;
+         PolyhedronIndex < Copy->PolyhedronCount;
+         ++PolyhedronIndex)
+    {
+        polyhedron *OriginalPolyhedron = Original->Polyhedra + PolyhedronIndex;
+        polyhedron *CopiedPolyhedron = Copy->Polyhedra + PolyhedronIndex;
+        
+        CopiedPolyhedron->VertexCount = OriginalPolyhedron->VertexCount;
+        CopiedPolyhedron->Vertices = MemoryArena_PushArray(Arena, CopiedPolyhedron->VertexCount, vec3);
+        for(u32 VertexIndex = 0;
+            VertexIndex < CopiedPolyhedron->VertexCount;
+            ++VertexIndex)
+        {
+            CopiedPolyhedron->Vertices[VertexIndex] = OriginalPolyhedron->Vertices[VertexIndex];
+        }
+        
+        CopiedPolyhedron->EdgeCount = OriginalPolyhedron->EdgeCount;
+        CopiedPolyhedron->Edges = MemoryArena_PushArray(Arena, CopiedPolyhedron->EdgeCount, edge);
+        for(u32 EdgeIndex = 0;
+            EdgeIndex < CopiedPolyhedron->EdgeCount;
+            ++EdgeIndex)
+        {
+            CopiedPolyhedron->Edges[EdgeIndex] = OriginalPolyhedron->Edges[EdgeIndex];
+        }
+        
+        CopiedPolyhedron->FaceCount = OriginalPolyhedron->FaceCount;
+        CopiedPolyhedron->Faces = MemoryArena_PushArray(Arena, CopiedPolyhedron->FaceCount, polygon);
+        for(u32 FaceIndex = 0;
+            FaceIndex < CopiedPolyhedron->FaceCount;
+            ++FaceIndex)
+        {
+            polygon *OriginalFace = OriginalPolyhedron->Faces + FaceIndex;
+            polygon *CopiedFace = CopiedPolyhedron->Faces + FaceIndex;
+
+            CopiedFace->Plane = OriginalFace->Plane;
+            CopiedFace->EdgeCount = OriginalFace->EdgeCount;
+            CopiedFace->EdgeIndices = MemoryArena_PushArray(Arena, CopiedFace->EdgeCount, u32);
+            for (u32 EdgeIndexIndex = 0;
+                 EdgeIndexIndex < CopiedFace->EdgeCount;
+                 ++EdgeIndexIndex)
+            {
+                CopiedFace->EdgeIndices[EdgeIndexIndex] = OriginalFace->EdgeIndices[EdgeIndexIndex];
+            }
+            CopiedFace->VertexCount = OriginalFace->VertexCount;
+            CopiedFace->VertexIndices = MemoryArena_PushArray(Arena, CopiedFace->VertexCount, u32);
+            for (u32 VertexIndexIndex = 0;
+                 VertexIndexIndex < CopiedFace->VertexCount;
+                 ++VertexIndexIndex)
+            {
+                CopiedFace->VertexIndices[VertexIndexIndex] = OriginalFace->VertexIndices[VertexIndexIndex];
+            }
+        }
+    }
+
+    return Copy;
+}
+
+polyhedron_set *
+CopyAndTransformPolyhedronSet(memory_arena *Arena, polyhedron_set *Original, vec3 Position, quat Rotation, vec3 Scale)
+{
+    polyhedron_set *CopiedSet = CopyPolyhedronSet(Arena, Original);
+
+    polyhedron *Polyhedron = CopiedSet->Polyhedra;
+    for (u32 PolyhedronIndex = 0;
+         PolyhedronIndex < CopiedSet->PolyhedronCount;
+         ++PolyhedronIndex, ++Polyhedron)
+    {
+        vec3 *Vertex = Polyhedron->Vertices;
+        for (u32 VertexIndex = 0;
+             VertexIndex < Polyhedron->VertexCount;
+             ++VertexIndex, ++Vertex)
+        {
+            FullTransformPoint(Vertex, Position, Rotation, Scale);
+        }
+
+        edge *Edge = Polyhedron->Edges;
+        for (u32 EdgeIndex = 0;
+             EdgeIndex < Polyhedron->EdgeCount;
+             ++EdgeIndex, ++Edge)
+        {
+            Edge->AB = Polyhedron->Vertices[Edge->BIndex] - Polyhedron->Vertices[Edge->AIndex];
+        }
+
+        polygon *Face = Polyhedron->Faces;
+        for (u32 FaceIndex = 0;
+             FaceIndex < Polyhedron->FaceCount;
+             ++FaceIndex, ++Face)
+        {
+            TransformNormal(&Face->Plane.Normal, Rotation, Scale);
+        } 
+    }
+
+    return CopiedSet;
 }
 
 inline void

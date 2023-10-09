@@ -25,7 +25,6 @@
     <ClCompile Include="..\..\source\opusone_camera.cpp" />
     <ClCompile Include="..\..\source\opusone_collision.cpp" />
     <ClCompile Include="..\..\source\opusone_debug_draw.cpp" />
-    <ClCompile Include="..\..\source\opusone_geometry.cpp" />
     <ClCompile Include="..\..\source\opusone_immtext.cpp" />
     <ClCompile Include="..\..\source\opusone_render.cpp" />
     <ClCompile Include="..\..\source\sdl_opusone.cpp" />

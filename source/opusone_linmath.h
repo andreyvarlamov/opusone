@@ -1055,7 +1055,7 @@ Mat4GetFullTransform(vec3 Position, quat Rotation, vec3 Scale)
 }
 
 internal inline vec3
-TransformPoint(vec3 Point, vec3 Position, quat Rotation, vec3 Scale)
+FullTransformPoint(vec3 Point, vec3 Position, quat Rotation, vec3 Scale)
 {
     vec3 Result = Point;
     
@@ -1076,6 +1076,18 @@ TransformNormal(vec3 Normal, quat Rotation, vec3 Scale)
     Result = RotateVecByQuatSlow(Result, Rotation);
 
     return Result;
+}
+
+internal inline void
+FullTransformPoint(vec3 *Point, vec3 Position, quat Rotation, vec3 Scale)
+{
+    *Point = FullTransformPoint(*Point, Position, Rotation, Scale);
+}
+
+internal inline void
+TransformNormal(vec3 *Normal, quat Rotation, vec3 Scale)
+{
+    *Normal = TransformNormal(*Normal, Rotation, Scale);
 }
 
 #endif

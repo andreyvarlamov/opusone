@@ -33,8 +33,8 @@ struct sphere
 
 struct edge
 {
-    vec3 *A;
-    vec3 *B;
+    u32 AIndex;
+    u32 BIndex;
     vec3 AB;
 };
 
@@ -49,10 +49,10 @@ struct polygon
     plane Plane;
 
     u32 EdgeCount;
-    edge **Edges;
+    u32 *EdgeIndices;
 
     u32 VertexCount;
-    vec3 **Vertices;
+    u32 *VertexIndices;
 };
 
 struct polyhedron
@@ -85,6 +85,11 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
                               vec3 *ImportedVertices, u32 VertexCount, i32 *ImportedIndices, u32 IndexCount,
                               polyhedron *Out_Polyhedron);
 
+polyhedron_set *
+CopyPolyhedronSet(memory_arena *Arena, polyhedron_set *PolyhedronSet);
+
+polyhedron_set *
+CopyAndTransformPolyhedronSet(memory_arena *Arena, polyhedron_set *Original, vec3 Position, quat Rotation, vec3 Scale);
 
 b32
 IsSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap);

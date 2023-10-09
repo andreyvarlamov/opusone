@@ -383,7 +383,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(Vec3(0,1,0), ToRadiansF(45.0f)), Vec3(1.0f, 1.0f, 1.0f) },
             world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f) },
             world_object_instance { 4, Vec3(-3.0f, 0.0f, 3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 5, Vec3(5.0f, 0.0f, 5.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), false, 0 },
+            world_object_instance { 5, Vec3(5.0f, 0.0f, 5.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), true, 0 },
         };
 
         GameState->WorldObjectInstanceCount = ArrayCount(Instances) + 1;
@@ -518,7 +518,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         {
             Assert(Blueprint->CollisionGeometry);
             
-            polyhedron_set *PolyhedronSet = &Blueprint->CollisionGeometry->PolyhedronSet;
+            polyhedron_set *PolyhedronSet = CopyAndTransformPolyhedronSet(&GameState->TransientArena,
+                                                                          &Blueprint->CollisionGeometry->PolyhedronSet,
+                                                                          Instance->Position,
+                                                                          Instance->Rotation,
+                                                                          Instance->Scale);
+
+            // polyhedron_set *PolyhedronSet = &Blueprint->CollisionGeometry->PolyhedronSet;
             Assert(PolyhedronSet->PolyhedronCount > 0);
 
             for (u32 PolyhedronIndex = 0;
@@ -532,35 +538,33 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                      TestPolyhedronEdgeIndex < Polyhedron->EdgeCount;
                      ++TestPolyhedronEdgeIndex, ++EdgeCursor)
                 {
-                    DD_DrawQuickVector(TransformPoint(*EdgeCursor->A, Instance->Position, Instance->Rotation, Instance->Scale),
-                                       TransformPoint(*EdgeCursor->B, Instance->Position, Instance->Rotation, Instance->Scale),
+                    DD_DrawQuickVector(Polyhedron->Vertices[EdgeCursor->AIndex],
+                                       Polyhedron->Vertices[EdgeCursor->BIndex],
                                        Vec3(1,0,1));
                 }
-                vec3 *VertCursor = Polyhedron->Vertices; 
-                for (u32 TestPolyhedronVertIndex = 0;
-                     TestPolyhedronVertIndex < Polyhedron->VertexCount;
-                     ++TestPolyhedronVertIndex, ++VertCursor)
+
+                vec3 *VertexCursor = Polyhedron->Vertices;
+                for (u32 VertexIndex = 0;
+                     VertexIndex < Polyhedron->VertexCount;
+                     ++VertexIndex, ++VertexCursor)
                 {
-                    DD_DrawQuickPoint(TransformPoint(*VertCursor, Instance->Position, Instance->Rotation, Instance->Scale),
-                                                     Vec3(1,0,0));
+                    DD_DrawQuickPoint(*VertexCursor, Vec3(1,0,0));
                 }
+                
                 polygon *FaceCursor = Polyhedron->Faces;
-                for (u32 TestPolyhedronFaceIndex = 0;
-                     TestPolyhedronFaceIndex < Polyhedron->FaceCount;
-                     ++TestPolyhedronFaceIndex, ++FaceCursor)
+                for (u32 FaceIndex = 0;
+                     FaceIndex < Polyhedron->FaceCount;
+                     ++FaceIndex, ++FaceCursor)
                 {
                     vec3 FaceCentroid = Vec3();
-                    for (u32 VertIndex = 0;
-                         VertIndex < FaceCursor->VertexCount;
-                         ++VertIndex)
+                    for (u32 VertexIndex = 0;
+                         VertexIndex < FaceCursor->VertexCount;
+                         ++VertexIndex)
                     {
-                        FaceCentroid += TransformPoint(*FaceCursor->Vertices[VertIndex],
-                                                       Instance->Position, Instance->Rotation, Instance->Scale);
+                        FaceCentroid += Polyhedron->Vertices[FaceCursor->VertexIndices[VertexIndex]];
                     }
                     FaceCentroid /= (f32) FaceCursor->VertexCount;
-                    DD_DrawQuickVector(FaceCentroid,
-                                       FaceCentroid + 0.25f*TransformNormal(FaceCursor->Plane.Normal, Instance->Rotation, Instance->Scale),
-                                       Vec3(1,1,1));
+                    DD_DrawQuickVector(FaceCentroid, FaceCentroid + 0.25f*FaceCursor->Plane.Normal, Vec3(1,1,1));
                 }
             }
         }

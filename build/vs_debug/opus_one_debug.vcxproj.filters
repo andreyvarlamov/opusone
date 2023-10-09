@@ -38,9 +38,6 @@
     <ClCompile Include="..\..\source\opusone_immtext.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\source\opusone_geometry.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\source\opusone_collision.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
