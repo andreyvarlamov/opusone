@@ -223,7 +223,7 @@ ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
 
     u32 PolyhedronEdgeCount = 0;
     for (u32 UniqueNormalIndex = 0;
-         UniqueNormalIndex < UniqueNormalCount-1;
+         UniqueNormalIndex < UniqueNormalCount;
          ++UniqueNormalIndex)
     {
         temp_edge *TempEdgeNode = TempEdgeHeads + UniqueNormalIndex;
@@ -507,8 +507,11 @@ GetRangesOverlap(f32 AMin, f32 AMax, f32 BMin, f32 BMax, b32 *Out_BComesFirst)
 }
 
 b32
-IsSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap)
+AreSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap)
 {
+    vec3 SmallestOverlapAxis = {};
+    f32 SmallestOverlap = FLT_MAX;
+    
     //
     // NOTE: 1. Check box face normals
     //
@@ -530,6 +533,12 @@ IsSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOve
         {
             return true;
         }
+
+        if (Overlap < SmallestOverlap)
+        {
+            SmallestOverlap = Overlap;
+            SmallestOverlapAxis = IsBoxInFront ? TestAxis : -TestAxis;
+        }
     }
 
     //
@@ -539,6 +548,26 @@ IsSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOve
          FaceIndex < Polyhedron->FaceCount;
          ++FaceIndex)
     {
+        vec3 TestAxis = Polyhedron->Faces[FaceIndex].Plane.Normal;
+
+        f32 BoxMinProj, BoxMaxProj;
+        GetBoxProjOnAxisMinMax(TestAxis, Box->Center, Box->Extents, Box->Axes, &BoxMinProj, &BoxMaxProj);
+        f32 PolyhedronMinProj, PolyhedronMaxProj;
+        GetPolyhedronProjOnAxisMinMax(TestAxis, Polyhedron->Vertices, Polyhedron->VertexCount, &PolyhedronMinProj, &PolyhedronMaxProj);
+
+        b32 IsBoxInFront;
+        f32 Overlap = GetRangesOverlap(BoxMinProj, BoxMaxProj, PolyhedronMinProj, PolyhedronMaxProj, &IsBoxInFront);
+
+        if (Overlap < 0.0f)
+        {
+            return true;
+        }
+
+        if (Overlap < SmallestOverlap)
+        {
+            SmallestOverlap = Overlap;
+            SmallestOverlapAxis = IsBoxInFront ? TestAxis : -TestAxis;
+        }
     }
 
     //
@@ -552,9 +581,34 @@ IsSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOve
              PolyhedronEdgeIndex < Polyhedron->EdgeCount;
              ++PolyhedronEdgeIndex)
         {
-            
+            vec3 TestAxis = VecNormalize(VecCross(Box->Axes[BoxAxisIndex], Polyhedron->Edges[PolyhedronEdgeIndex].AB));
+
+            if (!IsZeroVector(TestAxis))
+            {
+                f32 BoxMinProj, BoxMaxProj;
+                GetBoxProjOnAxisMinMax(TestAxis, Box->Center, Box->Extents, Box->Axes, &BoxMinProj, &BoxMaxProj);
+                f32 PolyhedronMinProj, PolyhedronMaxProj;
+                GetPolyhedronProjOnAxisMinMax(TestAxis, Polyhedron->Vertices, Polyhedron->VertexCount, &PolyhedronMinProj, &PolyhedronMaxProj);
+
+                b32 IsBoxInFront;
+                f32 Overlap = GetRangesOverlap(BoxMinProj, BoxMaxProj, PolyhedronMinProj, PolyhedronMaxProj, &IsBoxInFront);
+
+                if (Overlap < 0.0f)
+                {
+                    return true;
+                }
+
+                if (Overlap < SmallestOverlap)
+                {
+                    SmallestOverlap = Overlap;
+                    SmallestOverlapAxis = IsBoxInFront ? TestAxis : -TestAxis;
+                }
+            }
         }
     }
+
+    if (Out_SmallestOverlap) *Out_SmallestOverlap = SmallestOverlap;
+    if (Out_SmallestOverlapAxis) *Out_SmallestOverlapAxis = SmallestOverlapAxis;
 
     return false;
 }

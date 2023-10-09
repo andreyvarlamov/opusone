@@ -65,7 +65,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         // NOTE: Load models using assimp
         //
         simple_string ModelPaths[] = {
-            SimpleString("resources/models/box_room/BoxRoom.gltf"),
+            SimpleString("resources/models/box_room_separate/BoxRoomSeparate.gltf"),
             SimpleString("resources/models/adam/adam_new.gltf"),
             SimpleString("resources/models/complex_animation_keys/AnimationStudy2c.gltf"),
             SimpleString("resources/models/container/Container.gltf"),
@@ -73,7 +73,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         };
 
         collision_type BlueprintCollisionTypes[] = {
-            COLLISION_TYPE_NONE,
+            COLLISION_TYPE_POLYHEDRON_SET,
             COLLISION_TYPE_AABB,
             COLLISION_TYPE_NONE,
             COLLISION_TYPE_POLYHEDRON_SET,
@@ -383,7 +383,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(Vec3(0,1,0), ToRadiansF(45.0f)), Vec3(1.0f, 1.0f, 1.0f) },
             world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f) },
             world_object_instance { 4, Vec3(-3.0f, 0.0f, 3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 5, Vec3(5.0f, 0.0f, 5.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f), true, 0 },
+            world_object_instance { 5, Vec3(5.0f, 0.0f, 5.0f), Quat(), Vec3(3,3,3) },
+            world_object_instance { 4, Vec3(3,0,-3), Quat(Vec3(1,1,0), ToRadiansF(60)), Vec3(1,1,1) },
+
         };
 
         GameState->WorldObjectInstanceCount = ArrayCount(Instances) + 1;
@@ -507,6 +509,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     //
     // GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
 
+#if 1
     for (u32 InstanceIndex = 1;
          InstanceIndex < GameState->WorldObjectInstanceCount;
          ++InstanceIndex)
@@ -524,7 +527,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                                                           Instance->Rotation,
                                                                           Instance->Scale);
 
-            // polyhedron_set *PolyhedronSet = &Blueprint->CollisionGeometry->PolyhedronSet;
             Assert(PolyhedronSet->PolyhedronCount > 0);
 
             for (u32 PolyhedronIndex = 0;
@@ -569,7 +571,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             }
         }
     }
-
+#endif
+    
     world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
     world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
     
@@ -670,6 +673,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     Assert(PlayerBlueprint->CollisionGeometry);
     aabb *PlayerAABB = &PlayerBlueprint->CollisionGeometry->AABB;
     vec3 AABoxAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
+    box PlayerBox = {};
+    PlayerBox.Center = PlayerInstance->Position + PlayerTranslation + PlayerAABB->Center;
+    PlayerBox.Extents = PlayerAABB->Extents;
+    PlayerBox.Axes[0] = AABoxAxes[0];
+    PlayerBox.Axes[1] = AABoxAxes[1];
+    PlayerBox.Axes[2] = AABoxAxes[2];
 
     u32 CollisionIterations = 4; // NOTE: Iteration #4 is only to check if iteration #3 solved collisions
     b32 PlayerTranslationWasAdjusted = false;
@@ -684,12 +693,18 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             TranslationIsSafe = true;
             break;
         }
-        
+
         f32 SmallestPenetrationDepth = FLT_MAX;
         vec3 CollisionNormal = {};
+        u32 InstanceToResolveThisIteration = 0;
         
         b32 TranslationWillWorsenACollision = false;
         
+        if (GameInput->CurrentKeyStates[SDL_SCANCODE_B] && IterationIndex == 0)
+        {
+            Breakpoint;
+        }
+            
         for (u32 InstanceIndex = 1;
              InstanceIndex < GameState->WorldObjectInstanceCount;
              ++InstanceIndex)
@@ -708,11 +723,61 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
                     case COLLISION_TYPE_POLYHEDRON_SET:
                     {
-                        imported_model *ImportedModel = Blueprint->ImportedModel;
+                        polyhedron_set *PolyhedronSet = CopyAndTransformPolyhedronSet(&GameState->TransientArena,
+                                                                                      &Blueprint->CollisionGeometry->PolyhedronSet,
+                                                                                      Instance->Position,
+                                                                                      Instance->Rotation,
+                                                                                      Instance->Scale);
+                        
+                        polyhedron *Polyhedron = PolyhedronSet->Polyhedra;
+                        for (u32 PolyhedronIndex = 0;
+                             PolyhedronIndex < PolyhedronSet->PolyhedronCount;
+                             ++PolyhedronIndex, ++Polyhedron)
+                        {
+                            f32 ThisPenetrationDepth;
+                            vec3 ThisCollisionNormal;
+                            
+                            b32 AreSeparated =
+                                AreSeparatedBoxPolyhedron(Polyhedron, &PlayerBox, &ThisCollisionNormal, &ThisPenetrationDepth);
 
-                        vec3 InstanceTranslation = Instance->Position;
-                        mat3 InstanceTransform = Mat3GetRotationAndScale(Instance->Rotation, Instance->Scale);
+                            if (!AreSeparated &&
+                                VecDot(ThisCollisionNormal, PlayerTranslation) < -FLT_EPSILON &&
+                                ThisPenetrationDepth < SmallestPenetrationDepth)
+                            {
+                                SmallestPenetrationDepth = ThisPenetrationDepth;
+                                CollisionNormal =ThisCollisionNormal;
+                                TranslationWillWorsenACollision = true;
+                                InstanceToResolveThisIteration = InstanceIndex;
 
+                                edge *EdgeCursor = Polyhedron->Edges;
+                                for (u32 TestPolyhedronEdgeIndex = 0;
+                                     TestPolyhedronEdgeIndex < Polyhedron->EdgeCount;
+                                     ++TestPolyhedronEdgeIndex, ++EdgeCursor)
+                                {
+                                    DD_DrawQuickVector(Polyhedron->Vertices[EdgeCursor->AIndex],
+                                                       Polyhedron->Vertices[EdgeCursor->BIndex],
+                                                       Vec3(1,0,1));
+                                }
+                
+                                polygon *FaceCursor = Polyhedron->Faces;
+                                for (u32 FaceIndex = 0;
+                                     FaceIndex < Polyhedron->FaceCount;
+                                     ++FaceIndex, ++FaceCursor)
+                                {
+                                    vec3 FaceCentroid = Vec3();
+                                    for (u32 VertexIndex = 0;
+                                         VertexIndex < FaceCursor->VertexCount;
+                                         ++VertexIndex)
+                                    {
+                                        FaceCentroid += Polyhedron->Vertices[FaceCursor->VertexIndices[VertexIndex]];
+                                    }
+                                    FaceCentroid /= (f32) FaceCursor->VertexCount;
+                                    DD_DrawQuickVector(FaceCentroid, FaceCentroid + 0.25f*FaceCursor->Plane.Normal, Vec3(1,1,1));
+                                }
+                            }
+                        }
+
+                        Noop;
                     } break;
                 
                     case COLLISION_TYPE_AABB:
@@ -764,6 +829,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             SmallestPenetrationDepth = ThisPenetrationDepth;
                             CollisionNormal = ThisCollisionNormal;
                             TranslationWillWorsenACollision = true;
+                            InstanceToResolveThisIteration = InstanceIndex;
                         }
 
                         DD_DrawQuickAABox(Instance->Position + AABB->Center, AABB->Extents, SeparatingAxisFound ? Vec3(0,1,0) : Vec3(1,0,0));
@@ -800,8 +866,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             vec3 CollidingTranslationComponent = CollidingTranslationComponentMag * CollidingTranslationComponentDir;
 
             PlayerTranslation -= CollidingTranslationComponent;
+            PlayerBox.Center -= CollidingTranslationComponent;
 
             DD_DrawQuickVector(PlayerInstance->Position, PlayerInstance->Position + CollisionNormal, Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
+            ImmText_DrawQuickString(SimpleStringF("Collision: Iteration#%d: Instance#%d",
+                                                  IterationIndex, InstanceToResolveThisIteration).D);
         }
     }
 

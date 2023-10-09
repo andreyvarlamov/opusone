@@ -25,6 +25,8 @@ typedef i32      b32;
 #define Assert(Expression) if (!(Expression)) { *(int *) 0 = 0; }
 #define InvalidCodePath Assert(!"Invalid Code Path")
 #define Noop { volatile int X = 0; }
+void __debugbreak(); // usually in <intrin.h>
+#define Breakpoint __debugbreak()
 
 #define ArrayCount(Array) (sizeof((Array)) / (sizeof((Array)[0])))
 

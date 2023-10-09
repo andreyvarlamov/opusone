@@ -1074,6 +1074,7 @@ TransformNormal(vec3 Normal, quat Rotation, vec3 Scale)
     mat3 InverseScale = Mat3GetScale(1.0f / Scale);
     Result = InverseScale * Result;
     Result = RotateVecByQuatSlow(Result, Rotation);
+    Result = VecNormalize(Result);
 
     return Result;
 }

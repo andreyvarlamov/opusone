@@ -92,7 +92,7 @@ polyhedron_set *
 CopyAndTransformPolyhedronSet(memory_arena *Arena, polyhedron_set *Original, vec3 Position, quat Rotation, vec3 Scale);
 
 b32
-IsSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap);
+AreSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap);
 
 b32
 IsThereASeparatingAxisTriBox(vec3 A, vec3 B, vec3 C, vec3 BoxCenter, vec3 BoxExtents, vec3 *BoxAxes, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap, b32 *Out_OverlapAxisIsTriNormal);
