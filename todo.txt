@@ -39,6 +39,32 @@ TODO:
 
 
 - Scratch:
+    - Step over small obstacles
+    - Limits to sliding/climbing angles
+    - How to determine if the player is on the ground
+    - Some kind of separation between checking control inputs and applying them
+    - Intrinsics for math functions
+    - SIMD
+    - Optimized linmath functions: RotateVectorByQuat; FullTransform stuff
+    - Debug toggles: collisions and gravity
+    - Casting a ray against polyhedron
+    - Clean up game logic update
+    - Investigate weird stuttering when rotating camera.
+    - Animation controller
+    - Post-processing
+    - Import materials as part of the importing code.
+    - Render unit cleanup
+        - All render units in a linked list
+        - Fix render marker types being individual tagged unions, they should be per render unit
+        - Fixed sized render units.
+        - Reference using pointers, not indices (materials, render units, instances, blueprints)
+    - OBB vs OBB collisions. OBB for characters and monsters.
+    - Clean up collision geometry structs and lack thereof. Pull collision logic into a different function
+    - Refactor blueprints and instances. Entities.
+    - Collision info from DCC, through GLTF and Assimp. Analytical collision geometry and collision meshes
+    - DLL Hot-reloading
+    - Debug draw header
+    - Concept of a scene. Different types of lights. Multiple lights.
     - Mouse picking using the depth buffer and a framebuffer saving which model is displayed in that fragment
     - Draw text in the world space (e.g. instance ids above instances)
     - I don't think I need normals or alpha in debug draw vertex spec
@@ -56,7 +82,6 @@ TODO:
     - More efficient normal transform matrix calculation (calculate for each bone in software and send in uniform).
     - Normal mapping is not implemented in the shader.
     - Do light calculations in view space.
-    - Different types of lights. Multiple lights.
     - Materials. How much specular there is basically. Make it work together with specular mapping
     - Shadows. Implies multi-pass rendering
     - glUniformxx accepts count - can modify the whole array. Do that for bone transforms of skinned meshes

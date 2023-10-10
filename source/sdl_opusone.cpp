@@ -9,6 +9,9 @@
 #include "opusone_common.h"
 #include "opusone_platform.h"
 
+internal void
+UpdateInput(game_input *GameInput);
+
 int
 main(int Argc, char *Argv[])
 {
@@ -41,25 +44,27 @@ main(int Argc, char *Argv[])
     i32 TTFInitResult = TTF_Init();
     Assert(TTFInitResult != -1);
 
-    game_input GameInput = {};
     game_memory GameMemory = {};
     GameMemory.StorageSize = Megabytes(64);
     GameMemory.Storage = calloc(1, GameMemory.StorageSize);
     Assert(GameMemory.Storage);
 
-    SDL_GetWindowSize(Window, &GameInput.ScreenWidth, &GameInput.ScreenHeight);
-    GameInput.OriginalScreenWidth = GameInput.ScreenWidth;
-    GameInput.OriginalScreenHeight = GameInput.ScreenHeight;
-    glViewport(0, 0, GameInput.ScreenWidth, GameInput.ScreenHeight);
-    printf("PLATFORM: Original Screen Resolution: %d x %d\n", GameInput.OriginalScreenWidth, GameInput.OriginalScreenHeight);
+    game_input *GameInput = (game_input *) calloc(1, sizeof(game_input));
+    Assert(GameInput);
+
+    SDL_GetWindowSize(Window, &GameInput->ScreenWidth, &GameInput->ScreenHeight);
+    GameInput->OriginalScreenWidth = GameInput->ScreenWidth;
+    GameInput->OriginalScreenHeight = GameInput->ScreenHeight;
+    glViewport(0, 0, GameInput->ScreenWidth, GameInput->ScreenHeight);
+    printf("PLATFORM: Original Screen Resolution: %d x %d\n", GameInput->OriginalScreenWidth, GameInput->OriginalScreenHeight);
 
     f32 ExpectedRefreshRates[] = { 164.386f, 60.0f, 30.0f }; // Hardcode from my display settings for now
     u32 ExpectedRefreshRateCount = ArrayCount(ExpectedRefreshRates);
     
     u32 CurrentExpectedRefreshRate = 0;
-    GameInput.DeltaTime = 1.0f / ExpectedRefreshRates[CurrentExpectedRefreshRate];
+    GameInput->DeltaTime = 1.0f / ExpectedRefreshRates[CurrentExpectedRefreshRate];
     printf("PLATFORM: Expected refresh rate: %0.3f fps [DT=%0.6f]\n",
-           ExpectedRefreshRates[CurrentExpectedRefreshRate], GameInput.DeltaTime);
+           ExpectedRefreshRates[CurrentExpectedRefreshRate], GameInput->DeltaTime);
 
     u64 PerfCounterFrequency = SDL_GetPerformanceFrequency();
     u64 LastCounter = SDL_GetPerformanceCounter();
@@ -82,37 +87,26 @@ main(int Argc, char *Argv[])
                 {
                     if (SDLEvent.window.event == SDL_WINDOWEVENT_RESIZED)
                     {
-                        GameInput.ScreenWidth = SDLEvent.window.data1;
-                        GameInput.ScreenHeight = SDLEvent.window.data2;
-                        glViewport(0, 0, GameInput.ScreenWidth, GameInput.ScreenHeight);
-                        printf("PLATFORM: Window resized. New resolution: %d x %d\n", GameInput.ScreenWidth, GameInput.ScreenHeight);
+                        GameInput->ScreenWidth = SDLEvent.window.data1;
+                        GameInput->ScreenHeight = SDLEvent.window.data2;
+                        glViewport(0, 0, GameInput->ScreenWidth, GameInput->ScreenHeight);
+                        printf("PLATFORM: Window resized. New resolution: %d x %d\n", GameInput->ScreenWidth, GameInput->ScreenHeight);
                     }
                 } break;
             }
         }
 
-        GameInput.CurrentKeyStates = SDL_GetKeyboardState(0);
-        SDL_GetMouseState(&GameInput.MouseX, &GameInput.MouseY);
-        u32 SDLMouseButtonState = SDL_GetRelativeMouseState(&GameInput.MouseDeltaX, &GameInput.MouseDeltaY);
-        GameInput.MouseButtonState[0] = (SDL_BUTTON(1) & SDLMouseButtonState); // Left mouse button
-        GameInput.MouseButtonState[1] = (SDL_BUTTON(2) & SDLMouseButtonState); // Middle mouse button
-        GameInput.MouseButtonState[2] = (SDL_BUTTON(3) & SDLMouseButtonState); // Right mouse button
+        UpdateInput(GameInput);
 
-        if (GameInput.CurrentKeyStates[SDL_SCANCODE_F11] && !GameInput.KeyWasDown[SDL_SCANCODE_F11])
+        if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F11))
         {
             CurrentExpectedRefreshRate = (CurrentExpectedRefreshRate + 1) % ExpectedRefreshRateCount;
-            GameInput.DeltaTime = 1.0f / ExpectedRefreshRates[CurrentExpectedRefreshRate];
+            GameInput->DeltaTime = 1.0f / ExpectedRefreshRates[CurrentExpectedRefreshRate];
             printf("PLATFORM: Expected refresh rate: %0.3f fps [DT=%0.6f]\n",
-                   ExpectedRefreshRates[CurrentExpectedRefreshRate], GameInput.DeltaTime);
-            
-            GameInput.KeyWasDown[SDL_SCANCODE_F11] = true;
-        }
-        else if (!GameInput.CurrentKeyStates[SDL_SCANCODE_F11])
-        {
-            GameInput.KeyWasDown[SDL_SCANCODE_F11] = false;
+                   ExpectedRefreshRates[CurrentExpectedRefreshRate], GameInput->DeltaTime);
         }
 
-        GameUpdateAndRender(&GameInput, &GameMemory, &ShouldQuit);
+        GameUpdateAndRender(GameInput, &GameMemory, &ShouldQuit);
 
         SDL_GL_SwapWindow(Window);
 
@@ -131,10 +125,35 @@ main(int Argc, char *Argv[])
     return 0;
 }
 
+internal void
+UpdateInput(game_input *GameInput)
+{
+    const u8 *SDLKeyboardState = SDL_GetKeyboardState(0);
+    for (u32 ScancodeIndex = 0;
+         ScancodeIndex < SDL_NUM_SCANCODES;
+         ++ScancodeIndex)
+    {
+        GameInput->PreviousKeyStates_[ScancodeIndex] = GameInput->CurrentKeyStates_[ScancodeIndex];
+        GameInput->CurrentKeyStates_[ScancodeIndex] = (SDLKeyboardState[ScancodeIndex] != 0);
+    }
+    
+    u32 SDLMouseButtonState = SDL_GetMouseState(&GameInput->MouseX, &GameInput->MouseY);
+    for (u32 MouseButtonIndex = 0;
+         MouseButtonIndex < MouseButton_Count;
+         ++MouseButtonIndex)
+    {
+        GameInput->PreviousMouseButtonStates_[MouseButtonIndex] = GameInput->CurrentMouseButtonStates_[MouseButtonIndex];
+        GameInput->CurrentMouseButtonStates_[MouseButtonIndex] = (SDLMouseButtonState & SDL_BUTTON(MouseButtonIndex + 1));
+    }
+
+    SDL_GetRelativeMouseState(&GameInput->MouseDeltaX, &GameInput->MouseDeltaY);
+}
+
 void
 Platform_SetRelativeMouse(b32 Enabled)
 {
-    Assert(SDL_SetRelativeMouseMode((SDL_bool) Enabled) == 0);
+    i32 SDLResult = SDL_SetRelativeMouseMode((SDL_bool) Enabled);
+    Assert(SDLResult == 0);
 }
 
 char *

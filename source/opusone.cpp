@@ -135,8 +135,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                                       ImportedMeshCursor->Indices, ImportedMeshCursor->IndexCount,
                                                       PolyhedronCursor);
                     }
-
-                    Noop;
                 } break;
                 
                 default:
@@ -238,17 +236,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
 
         //
-        // NOTE: Imported data -> Rendering data
+        // NOTE: Prepare render data from the imported data
         //
         for (u32 BlueprintIndex = 1;
              BlueprintIndex < GameState->WorldObjectBlueprintCount;
              ++BlueprintIndex)
         {
-            if (BlueprintIndex == 5)
-            {
-                Noop;
-            }
-
             world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + BlueprintIndex;
             imported_model *ImportedModel = Blueprint->ImportedModel;
 
@@ -470,38 +463,23 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     //
     // NOTE: Misc controls
     //
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_ESCAPE])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_ESCAPE))
     {
         *GameShouldQuit = true;
     }
-    b32 IgnoreCollisions = GameInput->CurrentKeyStates[SDL_SCANCODE_LALT];
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_F1] && !GameInput->KeyWasDown[SDL_SCANCODE_F1])
+    b32 IgnoreCollisions = Platform_KeyIsDown(GameInput, SDL_SCANCODE_LALT);
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F1))
     {
         GameState->MouseControlledTemp = !GameState->MouseControlledTemp;
         Platform_SetRelativeMouse(GameState->MouseControlledTemp);
-        GameInput->KeyWasDown[SDL_SCANCODE_F1] = true;
     }
-    else if (!GameInput->CurrentKeyStates[SDL_SCANCODE_F1])
-    {
-        GameInput->KeyWasDown[SDL_SCANCODE_F1] = false;
-    }
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_F2] && !GameInput->KeyWasDown[SDL_SCANCODE_F2])
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F2))
     {
         GameState->ForceFirstPersonTemp = !GameState->ForceFirstPersonTemp;
-        GameInput->KeyWasDown[SDL_SCANCODE_F2] = true;
     }
-    else if (!GameInput->CurrentKeyStates[SDL_SCANCODE_F2])
-    {
-        GameInput->KeyWasDown[SDL_SCANCODE_F2] = false;
-    }
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_F3] && !GameInput->KeyWasDown[SDL_SCANCODE_F3])
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F3))
     {
         GameState->DebugCollisions = !GameState->DebugCollisions;
-        GameInput->KeyWasDown[SDL_SCANCODE_F3] = true;
-    }
-    else if (!GameInput->CurrentKeyStates[SDL_SCANCODE_F3])
-    {
-        GameInput->KeyWasDown[SDL_SCANCODE_F3] = false;
     }
 
     //
@@ -583,24 +561,24 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     f32 CameraDeltaTheta = 0.0f;
     f32 CameraDeltaPhi = 0.0f;
 
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_Q] ||
-        GameInput->CurrentKeyStates[SDL_SCANCODE_E] ||
-        GameInput->CurrentKeyStates[SDL_SCANCODE_Z] ||
-        GameInput->CurrentKeyStates[SDL_SCANCODE_X])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_Q) ||
+        Platform_KeyIsDown(GameInput, SDL_SCANCODE_E) ||
+        Platform_KeyIsDown(GameInput, SDL_SCANCODE_Z) ||
+        Platform_KeyIsDown(GameInput, SDL_SCANCODE_X))
     {
-        if (GameInput->CurrentKeyStates[SDL_SCANCODE_Q])
+        if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_Q))
         {
             CameraDeltaTheta += 1.0f;
         }
-        if (GameInput->CurrentKeyStates[SDL_SCANCODE_E])
+        if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_E))
         {
             CameraDeltaTheta -= 1.0f;
         }
-        if (GameInput->CurrentKeyStates[SDL_SCANCODE_Z])
+        if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_Z))
         {
             CameraDeltaPhi += 1.0f;
         }
-        if (GameInput->CurrentKeyStates[SDL_SCANCODE_X])
+        if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_X))
         {
             CameraDeltaPhi -= 1.0f;
         }
@@ -615,11 +593,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
     
     f32 CameraDeltaRadius = 0.0f;
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_V])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_V))
     {
         CameraDeltaRadius -= 1.0f;
     }
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_C])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_C))
     {
         CameraDeltaRadius += 1.0f;
     }
@@ -632,49 +610,53 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         UpdateCameraForceRadius(&GameState->Camera, 0);
     }
 
-    if (!GameInput->CurrentKeyStates[SDL_SCANCODE_TAB] && !GameInput->MouseButtonState[1])
+    if (!Platform_KeyIsDown(GameInput, SDL_SCANCODE_TAB) && !Platform_MouseButtonIsDown(GameInput, MouseButton_Middle))
     {
         PlayerInstance->Rotation = Quat(Vec3(0,1,0), ToRadiansF(GameState->Camera.Theta + 180.0f));
     }
 
     vec3 PlayerAcceleration = {};
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_W])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_W))
     {
         PlayerAcceleration.Z += 1.0f;
     }
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_S])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_S))
     {
         PlayerAcceleration.Z -= 1.0f;
-        GameState->PlayerAirborne = false;
     }
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_A])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_A))
     {
         PlayerAcceleration.X += 1.0f;
     }
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_D])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_D))
     {
         PlayerAcceleration.X -= 1.0f;
     }
 #if 0
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_LSHIFT])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_LSHIFT))
     {
         PlayerAcceleration.Y -= 1.0f;
     }
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_LCTRL])
+    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_LCTRL))
     {
         PlayerAcceleration.Y += 1.0f;
     }
 #endif
     PlayerAcceleration = 300.0f * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), PlayerInstance->Rotation);
 
-    PlayerAcceleration.Y = -100.0f;
+    PlayerAcceleration.Y = -500.0f;
     
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_SPACE] && !GameState->PlayerAirborne)
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_SPACE) && !GameState->PlayerAirborne)
     {
         GameState->PlayerAirborne = true;
-        GameState->PlayerVelocity.Y = 100.0f;
+        GameState->PlayerVelocity.Y += 100.0f;
     }
 
+    if (GameState->PlayerAirborne && PlayerInstance->Position.Y < 0.1f)
+    {
+        GameState->PlayerAirborne = false;
+    }
+    
     vec3 Drag = 50.0f * GameState->PlayerVelocity;
     PlayerAcceleration -= Drag;
 
@@ -689,12 +671,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     ImmText_DrawQuickString(SimpleStringF("Player position: {%0.3f,%0.3f,%0.3f}",
                                           PlayerInstance->Position.X, PlayerInstance->Position.Y, PlayerInstance->Position.Z).D);
 
-    
-    // TODO: Make this work with collisions
-    if (GameInput->CurrentKeyStates[SDL_SCANCODE_LCTRL])
-    {
-        PlayerInstance->Position.Y = 0.0f;
-    }
     
     Assert(PlayerBlueprint->CollisionGeometry);
     vec3 CardinalAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
@@ -726,7 +702,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         
         b32 TranslationWillWorsenACollision = false;
         
-        if (GameInput->CurrentKeyStates[SDL_SCANCODE_B] && IterationIndex == 0)
+        if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_B) && IterationIndex == 0)
         {
             Breakpoint;
         }

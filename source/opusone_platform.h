@@ -5,17 +5,25 @@
 
 #include <sdl2/SDL_scancode.h>
 
+enum mouse_button_type
+{
+    MouseButton_Left   = 0,
+    MouseButton_Middle = 1,
+    MouseButton_Right  = 2,
+    MouseButton_Count,
+};
+
 struct game_input
 {
-    const u8 *CurrentKeyStates;
-    u8 KeyWasDown[SDL_NUM_SCANCODES];
+    u8 CurrentKeyStates_[SDL_NUM_SCANCODES];
+    u8 PreviousKeyStates_[SDL_NUM_SCANCODES];
+    u8 CurrentMouseButtonStates_[MouseButton_Count];
+    u8 PreviousMouseButtonStates_[MouseButton_Count];
 
     i32 MouseX;
     i32 MouseY;
     i32 MouseDeltaX;
     i32 MouseDeltaY;
-    u8 MouseButtonState[3];
-    u8 MouseWasDown[3];
 
     f32 DeltaTime;
     i32 ScreenWidth;
@@ -51,6 +59,48 @@ struct platform_font
 
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameShouldQuit);
+
+inline b32
+Platform_KeyIsDown(game_input *GameInput, u32 KeyScancode)
+{
+    b32 Result = GameInput->CurrentKeyStates_[KeyScancode];
+    return Result;
+}
+
+inline b32
+Platform_KeyJustPressed(game_input *GameInput, u32 KeyScancode)
+{
+    b32 Result = (GameInput->CurrentKeyStates_[KeyScancode] && !GameInput->PreviousKeyStates_[KeyScancode]);
+    return Result;
+}
+
+inline b32
+Platform_KeyJustReleased(game_input *GameInput, u32 KeyScancode)
+{
+    b32 Result = (!GameInput->CurrentKeyStates_[KeyScancode] && GameInput->PreviousKeyStates_[KeyScancode]);
+    return Result;
+}
+
+inline b32
+Platform_MouseButtonIsDown(game_input *GameInput, mouse_button_type MouseButton)
+{
+    b32 Result = GameInput->CurrentMouseButtonStates_[MouseButton];
+    return Result;
+}
+
+inline b32
+Platform_MouseButtonJustPressed(game_input *GameInput, mouse_button_type MouseButton)
+{
+    b32 Result = (GameInput->CurrentMouseButtonStates_[MouseButton] && !GameInput->PreviousMouseButtonStates_[MouseButton]);
+    return Result;
+}
+
+inline b32
+Platform_MouseButtonJustReleased(game_input *GameInput, mouse_button_type MouseButton)
+{
+    b32 Result = (!GameInput->CurrentMouseButtonStates_[MouseButton] && GameInput->PreviousMouseButtonStates_[MouseButton]);
+    return Result;
+}
 
 void
 Platform_SetRelativeMouse(b32 Enabled);
