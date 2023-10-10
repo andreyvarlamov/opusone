@@ -59,7 +59,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         OpenGL_SetUniformInt(SkinnedShader, "FontAtlas", 0, true);
 
         InitializeCamera(&GameState->Camera, vec3 { 0.0f, 1.7f, 10.0f }, 0.0f, 75.0f, 5.0f);
-        GameState->DebugCollisions = true;
 
         //
         // NOTE: Load models using assimp
@@ -458,15 +457,24 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 Assert(SlotFound);
             }
         }
+
+        // NOTE: Set the player movement spec
+        GameState->PlayerSpecJumpVelocity = 100.0f;
+        GameState->PlayerSpecAccelerationValue = 300.0f;
+        GameState->PlayerSpecGravityValue = -500.0f;
+        GameState->PlayerSpecDragValue = 50.0f;
+
     }
 
     //
-    // NOTE: Misc controls
+    // NOTE: Process controls
     //
     if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_ESCAPE))
     {
         *GameShouldQuit = true;
     }
+    
+    // NOTE: Debug keys
     b32 IgnoreCollisions = Platform_KeyIsDown(GameInput, SDL_SCANCODE_LALT);
     if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F1))
     {
@@ -479,14 +487,119 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
     if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F3))
     {
-        GameState->DebugCollisions = !GameState->DebugCollisions;
+        GameState->GravityDisabledTemp = !GameState->GravityDisabledTemp;
     }
+    
+    // NOTE: Gameplay keys
+    game_requested_controls *RequestedControls = &GameState->RequestedControls;
+
+    RequestedControls->PlayerForward = Platform_KeyIsDown(GameInput, SDL_SCANCODE_W);
+    RequestedControls->PlayerBackward = Platform_KeyIsDown(GameInput, SDL_SCANCODE_S);
+    RequestedControls->PlayerLeft = Platform_KeyIsDown(GameInput, SDL_SCANCODE_A);
+    RequestedControls->PlayerRight = Platform_KeyIsDown(GameInput, SDL_SCANCODE_D);
+    RequestedControls->PlayerUp = Platform_KeyIsDown(GameInput, SDL_SCANCODE_SPACE);
+    RequestedControls->PlayerDown = Platform_KeyIsDown(GameInput, SDL_SCANCODE_LSHIFT);
+    RequestedControls->PlayerJump = Platform_KeyJustPressed(GameInput, SDL_SCANCODE_SPACE);
+    
+    RequestedControls->CameraForward = Platform_KeyIsDown(GameInput, SDL_SCANCODE_V);
+    RequestedControls->CameraBackward = Platform_KeyIsDown(GameInput, SDL_SCANCODE_C);
+    RequestedControls->CameraLeft = Platform_KeyIsDown(GameInput, SDL_SCANCODE_Q);
+    RequestedControls->CameraRight = Platform_KeyIsDown(GameInput, SDL_SCANCODE_E);
+    RequestedControls->CameraUp = Platform_KeyIsDown(GameInput, SDL_SCANCODE_Z);
+    RequestedControls->CameraDown = Platform_KeyIsDown(GameInput, SDL_SCANCODE_X);
+    RequestedControls->CameraIsIndependent = Platform_KeyIsDown(GameInput, SDL_SCANCODE_TAB) || Platform_MouseButtonIsDown(GameInput, MouseButton_Middle);
+
+    // NOTE: This will come from config or whatever
+    f32 KeyboardLookSensitivity = 150.0f;
+    f32 KeyboardDollySensitivity = 5.0f;
+    f32 MouseLookSensitivity = 0.035f;
 
     //
     // NOTE: Game logic update
     //
-    // GameState->WorldObjectInstances[9].Rotation *= Quat(Vec3(0.0f, 1.0f, 0.0f), ToRadiansF(30.0f) * GameInput->DeltaTime);
 
+    // NOTE: Updates requested by controls (camera)
+    f32 CameraDeltaTheta = 0.0f;
+    f32 CameraDeltaPhi = 0.0f;
+    f32 CameraDeltaRadius = 0.0f;
+    if (RequestedControls->CameraLeft) CameraDeltaTheta += 1.0f;
+    if (RequestedControls->CameraRight) CameraDeltaTheta -= 1.0f;
+    if (RequestedControls->CameraUp) CameraDeltaPhi += 1.0f;
+    if (RequestedControls->CameraDown) CameraDeltaPhi -= 1.0f;
+    if (RequestedControls->CameraForward) CameraDeltaRadius -= 1.0f;
+    if (RequestedControls->CameraBackward) CameraDeltaRadius += 1.0f;
+    CameraDeltaTheta *= KeyboardLookSensitivity * GameInput->DeltaTime;
+    CameraDeltaPhi *= KeyboardLookSensitivity * GameInput->DeltaTime;
+    CameraDeltaRadius *= KeyboardDollySensitivity * GameInput->DeltaTime;
+    if (GameState->MouseControlledTemp)
+    {
+        CameraDeltaTheta += MouseLookSensitivity * (f32) (-GameInput->MouseDeltaX);
+        CameraDeltaPhi += MouseLookSensitivity * (f32) (-GameInput->MouseDeltaY);
+    }
+    UpdateCameraSphericalOrientation(&GameState->Camera, CameraDeltaRadius, CameraDeltaTheta, CameraDeltaPhi);
+    
+    if (GameState->ForceFirstPersonTemp)
+    {
+        UpdateCameraForceRadius(&GameState->Camera, 0);
+    }
+
+    // NOTE: Updates requested by controls (player)
+    world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
+    world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
+    
+    if (!RequestedControls->CameraIsIndependent)
+    {
+        PlayerInstance->Rotation = Quat(Vec3(0,1,0), ToRadiansF(GameState->Camera.Theta + 180.0f));
+    }
+
+    vec3 PlayerAcceleration = {};
+    if (RequestedControls->PlayerForward) PlayerAcceleration.Z += 1.0f;
+    if (RequestedControls->PlayerBackward) PlayerAcceleration.Z -= 1.0f;
+    if (RequestedControls->PlayerLeft) PlayerAcceleration.X += 1.0f;
+    if (RequestedControls->PlayerRight) PlayerAcceleration.X -= 1.0f;
+    if (GameState->GravityDisabledTemp)
+    {
+        if (RequestedControls->PlayerDown) PlayerAcceleration.Y -= 1.0f;
+        if (RequestedControls->PlayerUp) PlayerAcceleration.Y += 1.0f;
+    }
+    PlayerAcceleration = GameState->PlayerSpecAccelerationValue * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), PlayerInstance->Rotation);
+
+    if (!GameState->GravityDisabledTemp)
+    {
+        // NOTE: Gravity
+        PlayerAcceleration.Y = GameState->PlayerSpecGravityValue;
+        if (RequestedControls->PlayerJump && !GameState->PlayerAirborne)
+        {
+            GameState->PlayerAirborne = true;
+            GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
+        }
+        if (GameState->PlayerAirborne && PlayerInstance->Position.Y < 0.1f)
+        {
+            GameState->PlayerAirborne = false;
+        }
+    }
+    else
+    {
+        GameState->PlayerAirborne = false;
+    }
+
+    // NOTE: Integration for player movement
+    PlayerAcceleration -= GameState->PlayerSpecDragValue * GameState->PlayerVelocity; // NOTE: Drag
+    
+    vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
+                              GameState->PlayerVelocity * GameInput->DeltaTime);
+
+    GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
+
+    ImmText_DrawQuickString(SimpleStringF("Player velocity: {%0.3f,%0.3f,%0.3f}",
+                                          GameState->PlayerVelocity.X, GameState->PlayerVelocity.Y, GameState->PlayerVelocity.Z).D);
+    ImmText_DrawQuickString(SimpleStringF("Player position: {%0.3f,%0.3f,%0.3f}",
+                                          PlayerInstance->Position.X, PlayerInstance->Position.Y, PlayerInstance->Position.Z).D);
+
+    // NOTE: Entity AI updates
+    // ....
+
+    // NOTE: Process entity movement
 #if 0
     for (u32 InstanceIndex = 1;
          InstanceIndex < GameState->WorldObjectInstanceCount;
@@ -550,128 +663,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 #endif
-    
-    world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
-    world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
-    
-    f32 KeyboardLookSensitivity = 150.0f;
-    f32 KeyboardDollySensitivity = 5.0f;
-    f32 MouseLookSensitivity = 0.035f;
-    
-    f32 CameraDeltaTheta = 0.0f;
-    f32 CameraDeltaPhi = 0.0f;
 
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_Q) ||
-        Platform_KeyIsDown(GameInput, SDL_SCANCODE_E) ||
-        Platform_KeyIsDown(GameInput, SDL_SCANCODE_Z) ||
-        Platform_KeyIsDown(GameInput, SDL_SCANCODE_X))
-    {
-        if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_Q))
-        {
-            CameraDeltaTheta += 1.0f;
-        }
-        if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_E))
-        {
-            CameraDeltaTheta -= 1.0f;
-        }
-        if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_Z))
-        {
-            CameraDeltaPhi += 1.0f;
-        }
-        if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_X))
-        {
-            CameraDeltaPhi -= 1.0f;
-        }
-        CameraDeltaTheta *= KeyboardLookSensitivity * GameInput->DeltaTime;
-        CameraDeltaPhi *= KeyboardLookSensitivity * GameInput->DeltaTime;
-    }
-
-    if (GameState->MouseControlledTemp)
-    {
-        CameraDeltaTheta += (f32) -GameInput->MouseDeltaX * MouseLookSensitivity;
-        CameraDeltaPhi += (f32) -GameInput->MouseDeltaY * MouseLookSensitivity;
-    }
-    
-    f32 CameraDeltaRadius = 0.0f;
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_V))
-    {
-        CameraDeltaRadius -= 1.0f;
-    }
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_C))
-    {
-        CameraDeltaRadius += 1.0f;
-    }
-    CameraDeltaRadius *= KeyboardDollySensitivity * GameInput->DeltaTime;
-    
-    UpdateCameraSphericalOrientation(&GameState->Camera, CameraDeltaRadius, CameraDeltaTheta, CameraDeltaPhi);
-    
-    if (GameState->ForceFirstPersonTemp)
-    {
-        UpdateCameraForceRadius(&GameState->Camera, 0);
-    }
-
-    if (!Platform_KeyIsDown(GameInput, SDL_SCANCODE_TAB) && !Platform_MouseButtonIsDown(GameInput, MouseButton_Middle))
-    {
-        PlayerInstance->Rotation = Quat(Vec3(0,1,0), ToRadiansF(GameState->Camera.Theta + 180.0f));
-    }
-
-    vec3 PlayerAcceleration = {};
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_W))
-    {
-        PlayerAcceleration.Z += 1.0f;
-    }
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_S))
-    {
-        PlayerAcceleration.Z -= 1.0f;
-    }
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_A))
-    {
-        PlayerAcceleration.X += 1.0f;
-    }
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_D))
-    {
-        PlayerAcceleration.X -= 1.0f;
-    }
-#if 0
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_LSHIFT))
-    {
-        PlayerAcceleration.Y -= 1.0f;
-    }
-    if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_LCTRL))
-    {
-        PlayerAcceleration.Y += 1.0f;
-    }
-#endif
-    PlayerAcceleration = 300.0f * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), PlayerInstance->Rotation);
-
-    PlayerAcceleration.Y = -500.0f;
-    
-    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_SPACE) && !GameState->PlayerAirborne)
-    {
-        GameState->PlayerAirborne = true;
-        GameState->PlayerVelocity.Y += 100.0f;
-    }
-
-    if (GameState->PlayerAirborne && PlayerInstance->Position.Y < 0.1f)
-    {
-        GameState->PlayerAirborne = false;
-    }
-    
-    vec3 Drag = 50.0f * GameState->PlayerVelocity;
-    PlayerAcceleration -= Drag;
-
-    vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
-                              GameState->PlayerVelocity * GameInput->DeltaTime);
-
-    GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
-
-    ImmText_DrawQuickString(SimpleStringF("Player velocity: {%0.3f,%0.3f,%0.3f}",
-                                          GameState->PlayerVelocity.X, GameState->PlayerVelocity.Y, GameState->PlayerVelocity.Z).D);
-
-    ImmText_DrawQuickString(SimpleStringF("Player position: {%0.3f,%0.3f,%0.3f}",
-                                          PlayerInstance->Position.X, PlayerInstance->Position.Y, PlayerInstance->Position.Z).D);
-
-    
     Assert(PlayerBlueprint->CollisionGeometry);
     vec3 CardinalAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
 
@@ -885,9 +877,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                       PlayerBlueprint->CollisionGeometry->AABB.Extents,
                       PlayerTranslationWasAdjusted ? Vec3(1,0,0) : Vec3(0,1,0));
 
-    //
     // NOTE: Mouse picking
-    //
     vec3 CameraFront = -VecSphericalToCartesian(GameState->Camera.Theta, GameState->Camera.Phi);
 
     vec3 RayPosition = PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0);

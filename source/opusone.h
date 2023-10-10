@@ -36,6 +36,25 @@ struct world_object_instance
     animation_state *AnimationState;
 };
 
+struct game_requested_controls
+{
+    b32 PlayerForward;
+    b32 PlayerBackward;
+    b32 PlayerLeft;
+    b32 PlayerRight;
+    b32 PlayerUp;
+    b32 PlayerDown;
+    b32 PlayerJump;
+
+    b32 CameraForward;
+    b32 CameraBackward;
+    b32 CameraLeft;
+    b32 CameraRight;
+    b32 CameraUp;
+    b32 CameraDown;
+    b32 CameraIsIndependent;
+};
+
 struct game_state
 {
     memory_arena RootArena;
@@ -44,10 +63,10 @@ struct game_state
     memory_arena RenderArena;
     memory_arena AssetArena;
     memory_arena TransientArena;
+
+    game_requested_controls RequestedControls;
     
     camera Camera;
-    b32 ForceFirstPersonTemp;
-    b32 MouseControlledTemp;
 
     render_unit StaticRenderUnit;
     render_unit SkinnedRenderUnit;
@@ -67,8 +86,15 @@ struct game_state
     u32 PlayerWorldInstanceID;
     vec3 PlayerVelocity;
     b32 PlayerAirborne;
+    
+    f32 PlayerSpecJumpVelocity;
+    f32 PlayerSpecAccelerationValue;
+    f32 PlayerSpecGravityValue;
+    f32 PlayerSpecDragValue;
 
-    b32 DebugCollisions;
+    b32 ForceFirstPersonTemp;
+    b32 MouseControlledTemp;
+    b32 GravityDisabledTemp;
 };
 
 #endif
