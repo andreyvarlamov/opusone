@@ -3,7 +3,6 @@
 #include "opusone.h"
 #include "opusone_math.h"
 #include "opusone_linmath.h"
-#include "opusone_camera.h"
 #include "opusone_assimp.h"
 #include "opusone_render.h"
 #include "opusone_animation.h"
@@ -58,7 +57,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         u32 ImmTextShader = OpenGL_BuildShaderProgram("resources/shaders/ImmText.vs", "resources/shaders/ImmText.fs");
         OpenGL_SetUniformInt(SkinnedShader, "FontAtlas", 0, true);
 
-        InitializeCamera(&GameState->Camera, vec3 { 0.0f, 1.7f, 10.0f }, 0.0f, 75.0f, 5.0f);
+        GameState->CameraPosition = Vec3(0.0f, 0.1f, 5.0f);
+        GameState->CameraTheta = 180.0f;
+        GameState->CameraPhi = 110.0f;
+        GameState->CameraThirdPersonRadius = 5.0f;
 
         //
         // NOTE: Load models using assimp
@@ -373,7 +375,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
             world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f) },
             world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(Vec3(0,1,0), ToRadiansF(45.0f)), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(180.0f)), Vec3(1.0f, 1.0f, 1.0f) },
+            world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(0.0f)), Vec3(1.0f, 1.0f, 1.0f) },
             world_object_instance { 4, Vec3(-3.0f, 0.0f, 3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
             world_object_instance { 5, Vec3(5.0f, 0.0f, 5.0f), Quat(), Vec3(3,3,3) },
             world_object_instance { 4, Vec3(3,0,-3), Quat(Vec3(1,1,0), ToRadiansF(60)), Vec3(1,1,1) },
@@ -385,7 +387,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                                                 GameState->WorldObjectInstanceCount,
                                                                 world_object_instance);
 
-        GameState->PlayerCameraYOffset = 1.7f;
+        GameState->PlayerEyeHeight = 1.7f;
         GameState->PlayerWorldInstanceID = 10;
         
         for (u32 InstanceIndex = 1;
@@ -483,7 +485,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
     if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F2))
     {
-        GameState->ForceFirstPersonTemp = !GameState->ForceFirstPersonTemp;
+        GameState->CameraIsFirstPerson = !GameState->CameraIsFirstPerson;
     }
     if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F3))
     {
@@ -499,7 +501,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     RequestedControls->PlayerRight = Platform_KeyIsDown(GameInput, SDL_SCANCODE_D);
     RequestedControls->PlayerUp = Platform_KeyIsDown(GameInput, SDL_SCANCODE_SPACE);
     RequestedControls->PlayerDown = Platform_KeyIsDown(GameInput, SDL_SCANCODE_LSHIFT);
-    RequestedControls->PlayerJump = Platform_KeyJustPressed(GameInput, SDL_SCANCODE_SPACE);
+    RequestedControls->PlayerJump = Platform_KeyJustPressed(GameInput, SDL_SCANCODE_SPACE) || Platform_KeyJustPressed(GameInput, SDL_SCANCODE_BACKSPACE);
     
     RequestedControls->CameraForward = Platform_KeyIsDown(GameInput, SDL_SCANCODE_V);
     RequestedControls->CameraBackward = Platform_KeyIsDown(GameInput, SDL_SCANCODE_C);
@@ -524,8 +526,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     f32 CameraDeltaRadius = 0.0f;
     if (RequestedControls->CameraLeft) CameraDeltaTheta += 1.0f;
     if (RequestedControls->CameraRight) CameraDeltaTheta -= 1.0f;
-    if (RequestedControls->CameraUp) CameraDeltaPhi += 1.0f;
-    if (RequestedControls->CameraDown) CameraDeltaPhi -= 1.0f;
+    if (RequestedControls->CameraUp) CameraDeltaPhi -= 1.0f;
+    if (RequestedControls->CameraDown) CameraDeltaPhi += 1.0f;
     if (RequestedControls->CameraForward) CameraDeltaRadius -= 1.0f;
     if (RequestedControls->CameraBackward) CameraDeltaRadius += 1.0f;
     CameraDeltaTheta *= KeyboardLookSensitivity * GameInput->DeltaTime;
@@ -534,22 +536,20 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     if (GameState->MouseControlledTemp)
     {
         CameraDeltaTheta += MouseLookSensitivity * (f32) (-GameInput->MouseDeltaX);
-        CameraDeltaPhi += MouseLookSensitivity * (f32) (-GameInput->MouseDeltaY);
-    }
-    UpdateCameraSphericalOrientation(&GameState->Camera, CameraDeltaRadius, CameraDeltaTheta, CameraDeltaPhi);
-    
-    if (GameState->ForceFirstPersonTemp)
-    {
-        UpdateCameraForceRadius(&GameState->Camera, 0);
+        CameraDeltaPhi += MouseLookSensitivity * (f32) (GameInput->MouseDeltaY);
     }
 
+    GameState->CameraTheta += CameraDeltaTheta;
+    GameState->CameraPhi += CameraDeltaPhi;
+    GameState->CameraThirdPersonRadius += CameraDeltaRadius;
+    
     // NOTE: Updates requested by controls (player)
     world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
     world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
-    
+
     if (!RequestedControls->CameraIsIndependent)
     {
-        PlayerInstance->Rotation = Quat(Vec3(0,1,0), ToRadiansF(GameState->Camera.Theta + 180.0f));
+        PlayerInstance->Rotation = Quat(Vec3(0,1,0), ToRadiansF(GameState->CameraTheta));
     }
 
     vec3 PlayerAcceleration = {};
@@ -870,7 +870,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     if (TranslationIsSafe)
     {
         PlayerInstance->Position += PlayerTranslation;
-        SetThirdPersonCameraTarget(&GameState->Camera, PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0));
+        GameState->CameraPosition = PlayerInstance->Position + Vec3(0,GameState->PlayerEyeHeight,0);
     }
 
     DD_DrawQuickAABox(PlayerInstance->Position + PlayerBlueprint->CollisionGeometry->AABB.Center,
@@ -878,9 +878,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                       PlayerTranslationWasAdjusted ? Vec3(1,0,0) : Vec3(0,1,0));
 
     // NOTE: Mouse picking
-    vec3 CameraFront = -VecSphericalToCartesian(GameState->Camera.Theta, GameState->Camera.Phi);
+    vec3 CameraFront = VecSphericalToCartesian(GameState->CameraTheta, GameState->CameraPhi);
 
-    vec3 RayPosition = PlayerInstance->Position + Vec3(0,GameState->PlayerCameraYOffset,0);
+    vec3 RayPosition = PlayerInstance->Position + Vec3(0,GameState->PlayerEyeHeight,0);
     vec3 RayDirection = VecNormalize(CameraFront);
     f32 RayTMin = FLT_MAX;
     u32 ClosestInstanceIndex = 0;
@@ -925,9 +925,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         ImmText_DrawQuickString(SimpleStringF("Looking at inst#%d", ClosestInstanceIndex).D);
     }
 
-    if (GameState->ForceFirstPersonTemp)
+    if (GameState->CameraIsFirstPerson)
     {
-        DD_DrawPoint(&GameState->DebugDrawRenderUnit, GameState->Camera.Position + CameraFront, Vec3(1), 4);
+        DD_DrawPoint(&GameState->DebugDrawRenderUnit, GameState->CameraPosition + CameraFront, Vec3(1), 4);
     }
     
     for (u32 InstanceIndex = 0;
@@ -947,8 +947,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 
-    OpenGL_SetUniformVec3F(GameState->StaticRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->Camera.Position, true);
-    OpenGL_SetUniformVec3F(GameState->SkinnedRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->Camera.Position, true);
+    OpenGL_SetUniformVec3F(GameState->StaticRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->CameraPosition, true);
+    OpenGL_SetUniformVec3F(GameState->SkinnedRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->CameraPosition, true);
     
     //
     // NOTE: Render
@@ -982,7 +982,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                                               0.1f, 1000.0f);
             OpenGL_SetUniformMat4F(RenderUnit->ShaderID, "Projection", (f32 *) &ProjectionMat, false);
             
-            mat4 ViewMat = GetCameraViewMat(&GameState->Camera);
+            mat4 ViewMat = Mat4GetView(GameState->CameraPosition, GameState->CameraTheta, GameState->CameraPhi,
+                                       GameState->CameraIsFirstPerson ? 0.0f : GameState->CameraThirdPersonRadius);
             OpenGL_SetUniformMat4F(RenderUnit->ShaderID, "View", (f32 *) &ViewMat, false);
 
             PreviousShaderID = RenderUnit->ShaderID;
@@ -1030,7 +1031,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     {
                         u32 InstanceID = Mesh->InstanceIDs[InstanceSlotIndex];
                         if (InstanceID > 0 &&
-                            (InstanceID != GameState->PlayerWorldInstanceID || !GameState->ForceFirstPersonTemp))
+                            (InstanceID != GameState->PlayerWorldInstanceID || !GameState->CameraIsFirstPerson))
                         {
                             // b32 ShouldLog = (InstanceID == 5);
                             world_object_instance *Instance = GameState->WorldObjectInstances + InstanceID;

@@ -65,8 +65,12 @@ struct game_state
     memory_arena TransientArena;
 
     game_requested_controls RequestedControls;
-    
-    camera Camera;
+
+    vec3 CameraPosition;
+    f32 CameraTheta;
+    f32 CameraPhi;
+    f32 CameraThirdPersonRadius;
+    b32 CameraIsFirstPerson;
 
     render_unit StaticRenderUnit;
     render_unit SkinnedRenderUnit;
@@ -82,7 +86,7 @@ struct game_state
     font_info *ContrailOne;
     font_info *MajorMono;
 
-    f32 PlayerCameraYOffset;
+    f32 PlayerEyeHeight;
     u32 PlayerWorldInstanceID;
     vec3 PlayerVelocity;
     b32 PlayerAirborne;
@@ -92,7 +96,6 @@ struct game_state
     f32 PlayerSpecGravityValue;
     f32 PlayerSpecDragValue;
 
-    b32 ForceFirstPersonTemp;
     b32 MouseControlledTemp;
     b32 GravityDisabledTemp;
 };

@@ -313,9 +313,14 @@ VecSphericalToCartesian(f32 Theta, f32 Phi)
     f32 ThetaRads = ToRadiansF(Theta);
     f32 PhiRads = ToRadiansF(Phi);
 
-    Result.X = SinF(PhiRads) * SinF(ThetaRads);
-    Result.Y = CosF(PhiRads);
-    Result.Z = SinF(PhiRads) * CosF(ThetaRads);
+    f32 SinPhi = SinF(PhiRads);
+    f32 SinTheta = SinF(ThetaRads);
+    f32 CosPhi = CosF(PhiRads);
+    f32 CosTheta = CosF(ThetaRads);
+
+    Result.X = SinPhi * SinTheta;
+    Result.Y = CosPhi;
+    Result.Z = SinPhi * CosTheta;
 
     return Result;
 }
@@ -552,6 +557,13 @@ internal inline f32
 QuatDot(quat A, quat B)
 {
     f32 Result = A.W * B.W + A.X * B.X + A.Y * B.Y + A.Z * B.Z;
+    return Result;
+}
+
+internal inline quat
+QuatInverse(quat Q)
+{
+    quat Result = QuatConjugate(Q) / QuatDot(Q, Q);
     return Result;
 }
 
@@ -913,51 +925,6 @@ operator*(mat4 M, vec4 V)
 // ---------------------------------------------------------------------------------
 
 internal inline mat4
-Mat4GetView(vec3 EyePosition, vec3 TargetPoint, vec3 WorldUp)
-{
-    // NOTE: General formula: https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluLookAt.xml
-    // Translation optimization by dot product from GLM
-
-    vec3 Front = VecNormalize(TargetPoint - EyePosition);
-    vec3 Right = VecNormalize(VecCross(Front, VecNormalize(WorldUp)));
-    vec3 Up = VecCross(Right, Front);
-
-    mat4 Result = Mat4(1.0f);
-    Result.E[0][0] =  Right.X;
-    Result.E[0][1] =  Up.X;
-    Result.E[0][2] = -Front.X;
-    Result.E[1][0] =  Right.Y;
-    Result.E[1][1] =  Up.Y;
-    Result.E[1][2] = -Front.Y;
-    Result.E[2][0] =  Right.Z;
-    Result.E[2][1] =  Up.Z;
-    Result.E[2][2] = -Front.Z;
-    Result.E[3][0] = -VecDot(Right, EyePosition);
-    Result.E[3][1] = -VecDot(Up, EyePosition);
-    Result.E[3][2] =  VecDot(Front, EyePosition);
-
-    return Result;
-}
-
-internal inline mat4
-Mat4GetPerspecitveProjection(f32 FovY_Degrees, f32 AspectRatio, f32 Near, f32 Far)
-{
-    // NOTE: http://www.songho.ca/opengl/gl_projectionmatrix.html
-    mat4 Result = {};
-
-    f32 HalfHeight = Near * TanF(ToRadiansF(FovY_Degrees) / 2.0f);
-    f32 HalfWidth = HalfHeight * AspectRatio;
-
-    Result.E[0][0] = Near / HalfWidth;
-    Result.E[1][1] = Near / HalfHeight;
-    Result.E[2][2] = -(Far + Near) / (Far - Near);
-    Result.E[2][3] = -1.0f;
-    Result.E[3][2] = -2.0f * Far * Near / (Far - Near);
-
-    return Result;
-}
-
-internal inline mat4
 Mat4GetTranslation(vec3 Translation)
 {
     mat4 Result = Mat4(1.0f);
@@ -1089,6 +1056,49 @@ internal inline void
 TransformNormal(vec3 *Normal, quat Rotation, vec3 Scale)
 {
     *Normal = TransformNormal(*Normal, Rotation, Scale);
+}
+
+internal inline mat4
+Mat4GetView(vec3 Position, f32 Theta, f32 Phi, f32 ThirdPersonRadius)
+{
+    vec3 Front = VecSphericalToCartesian(Theta, Phi);
+    vec3 Right = VecNormalize(VecCross(Front, Vec3(0,1,0)));
+    vec3 Up = VecCross(Right, Front);
+    
+    mat4 Result = Mat4(1.0f);
+    
+    Result.E[0][0] =  Right.X;
+    Result.E[0][1] =  Up.X;
+    Result.E[0][2] = -Front.X;
+    Result.E[1][0] =  Right.Y;
+    Result.E[1][1] =  Up.Y;
+    Result.E[1][2] = -Front.Y;
+    Result.E[2][0] =  Right.Z;
+    Result.E[2][1] =  Up.Z;
+    Result.E[2][2] = -Front.Z;
+    Result.E[3][0] = -VecDot(Right, Position);
+    Result.E[3][1] = -VecDot(Up, Position);
+    Result.E[3][2] =  VecDot(Front, Position) - ThirdPersonRadius;
+
+    return Result;
+}
+
+internal inline mat4
+Mat4GetPerspecitveProjection(f32 FovY_Degrees, f32 AspectRatio, f32 Near, f32 Far)
+{
+    // NOTE: http://www.songho.ca/opengl/gl_projectionmatrix.html
+    mat4 Result = {};
+
+    f32 HalfHeight = Near * TanF(ToRadiansF(FovY_Degrees) / 2.0f);
+    f32 HalfWidth = HalfHeight * AspectRatio;
+
+    Result.E[0][0] = Near / HalfWidth;
+    Result.E[1][1] = Near / HalfHeight;
+    Result.E[2][2] = -(Far + Near) / (Far - Near);
+    Result.E[2][3] = -1.0f;
+    Result.E[3][2] = -2.0f * Far * Near / (Far - Near);
+
+    return Result;
 }
 
 #endif
