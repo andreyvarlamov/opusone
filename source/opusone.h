@@ -66,11 +66,10 @@ struct game_state
 
     game_requested_controls RequestedControls;
 
-    vec3 CameraPosition;
-    f32 CameraTheta;
-    f32 CameraPhi;
-    f32 CameraThirdPersonRadius;
-    b32 CameraIsFirstPerson;
+    camera Camera;
+    b32 CameraWillReset;
+    f32 CameraYawToResetTo;
+    f32 CameraPitchToResetTo;
 
     render_unit StaticRenderUnit;
     render_unit SkinnedRenderUnit;

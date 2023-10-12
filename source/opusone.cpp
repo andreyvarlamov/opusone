@@ -57,10 +57,11 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         u32 ImmTextShader = OpenGL_BuildShaderProgram("resources/shaders/ImmText.vs", "resources/shaders/ImmText.fs");
         OpenGL_SetUniformInt(SkinnedShader, "FontAtlas", 0, true);
 
-        GameState->CameraPosition = Vec3(0.0f, 0.1f, 5.0f);
-        GameState->CameraTheta = 180.0f;
-        GameState->CameraPhi = 110.0f;
-        GameState->CameraThirdPersonRadius = 5.0f;
+        GameState->Camera.Position = Vec3(0.0f, 0.1f, 5.0f);
+        GameState->Camera.Yaw = 180.0f;
+        GameState->Camera.Pitch = -30.0f;
+        GameState->Camera.ThirdPersonRadius = 5.0f;
+        GameState->Camera.IsThirdPerson = true;
 
         //
         // NOTE: Load models using assimp
@@ -485,7 +486,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
     if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F2))
     {
-        GameState->CameraIsFirstPerson = !GameState->CameraIsFirstPerson;
+        GameState->Camera.IsThirdPerson = !GameState->Camera.IsThirdPerson;
     }
     if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F3))
     {
@@ -521,35 +522,47 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     //
 
     // NOTE: Updates requested by controls (camera)
-    f32 CameraDeltaTheta = 0.0f;
-    f32 CameraDeltaPhi = 0.0f;
+    f32 CameraDeltaYaw = 0.0f;
+    f32 CameraDeltaPitch = 0.0f;
     f32 CameraDeltaRadius = 0.0f;
-    if (RequestedControls->CameraLeft) CameraDeltaTheta += 1.0f;
-    if (RequestedControls->CameraRight) CameraDeltaTheta -= 1.0f;
-    if (RequestedControls->CameraUp) CameraDeltaPhi -= 1.0f;
-    if (RequestedControls->CameraDown) CameraDeltaPhi += 1.0f;
+    if (RequestedControls->CameraLeft) CameraDeltaYaw += 1.0f;
+    if (RequestedControls->CameraRight) CameraDeltaYaw -= 1.0f;
+    if (RequestedControls->CameraUp) CameraDeltaPitch += 1.0f;
+    if (RequestedControls->CameraDown) CameraDeltaPitch -= 1.0f;
     if (RequestedControls->CameraForward) CameraDeltaRadius -= 1.0f;
     if (RequestedControls->CameraBackward) CameraDeltaRadius += 1.0f;
-    CameraDeltaTheta *= KeyboardLookSensitivity * GameInput->DeltaTime;
-    CameraDeltaPhi *= KeyboardLookSensitivity * GameInput->DeltaTime;
+    CameraDeltaYaw *= KeyboardLookSensitivity * GameInput->DeltaTime;
+    CameraDeltaPitch *= KeyboardLookSensitivity * GameInput->DeltaTime;
     CameraDeltaRadius *= KeyboardDollySensitivity * GameInput->DeltaTime;
     if (GameState->MouseControlledTemp)
     {
-        CameraDeltaTheta += MouseLookSensitivity * (f32) (-GameInput->MouseDeltaX);
-        CameraDeltaPhi += MouseLookSensitivity * (f32) (GameInput->MouseDeltaY);
+        CameraDeltaYaw += MouseLookSensitivity * (f32) (-GameInput->MouseDeltaX);
+        CameraDeltaPitch += MouseLookSensitivity * (f32) (-GameInput->MouseDeltaY);
     }
-
-    GameState->CameraTheta += CameraDeltaTheta;
-    GameState->CameraPhi += CameraDeltaPhi;
-    GameState->CameraThirdPersonRadius += CameraDeltaRadius;
+    CameraSetDeltaOrientation(&GameState->Camera, CameraDeltaYaw, CameraDeltaPitch, CameraDeltaRadius);
     
     // NOTE: Updates requested by controls (player)
     world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
     world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
 
-    if (!RequestedControls->CameraIsIndependent)
+    if (RequestedControls->CameraIsIndependent)
     {
-        PlayerInstance->Rotation = Quat(Vec3(0,1,0), ToRadiansF(GameState->CameraTheta));
+        if (!GameState->CameraWillReset)
+        {
+            GameState->CameraYawToResetTo = GameState->Camera.Yaw;
+            GameState->CameraPitchToResetTo = GameState->Camera.Pitch;
+            GameState->CameraWillReset = true;
+        }
+    }
+    else
+    {
+        if (GameState->CameraWillReset)
+        {
+            CameraSetOrientation(&GameState->Camera, GameState->CameraYawToResetTo, GameState->CameraPitchToResetTo);
+            GameState->CameraWillReset = false;
+        }
+        
+        PlayerInstance->Rotation = CameraGetYawQuat(&GameState->Camera);
     }
 
     vec3 PlayerAcceleration = {};
@@ -870,7 +883,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     if (TranslationIsSafe)
     {
         PlayerInstance->Position += PlayerTranslation;
-        GameState->CameraPosition = PlayerInstance->Position + Vec3(0,GameState->PlayerEyeHeight,0);
+        CameraSetWorldPosition(&GameState->Camera, PlayerInstance->Position + Vec3(0, GameState->PlayerEyeHeight,0));
     }
 
     DD_DrawQuickAABox(PlayerInstance->Position + PlayerBlueprint->CollisionGeometry->AABB.Center,
@@ -878,10 +891,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                       PlayerTranslationWasAdjusted ? Vec3(1,0,0) : Vec3(0,1,0));
 
     // NOTE: Mouse picking
-    vec3 CameraFront = VecSphericalToCartesian(GameState->CameraTheta, GameState->CameraPhi);
-
+    vec3 CameraFront = CameraGetFront(&GameState->Camera);
+    
     vec3 RayPosition = PlayerInstance->Position + Vec3(0,GameState->PlayerEyeHeight,0);
-    vec3 RayDirection = VecNormalize(CameraFront);
+    vec3 RayDirection = CameraFront;
     f32 RayTMin = FLT_MAX;
     u32 ClosestInstanceIndex = 0;
     
@@ -925,9 +938,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         ImmText_DrawQuickString(SimpleStringF("Looking at inst#%d", ClosestInstanceIndex).D);
     }
 
-    if (GameState->CameraIsFirstPerson)
+    if (!GameState->Camera.IsThirdPerson)
     {
-        DD_DrawPoint(&GameState->DebugDrawRenderUnit, GameState->CameraPosition + CameraFront, Vec3(1), 4);
+        DD_DrawPoint(&GameState->DebugDrawRenderUnit, GameState->Camera.Position + CameraGetFront(&GameState->Camera), Vec3(1), 4);
     }
     
     for (u32 InstanceIndex = 0;
@@ -947,8 +960,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 
-    OpenGL_SetUniformVec3F(GameState->StaticRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->CameraPosition, true);
-    OpenGL_SetUniformVec3F(GameState->SkinnedRenderUnit.ShaderID, "ViewPosition", (f32 *) &GameState->CameraPosition, true);
+    vec3 ViewPosition = CameraGetTruePosition(&GameState->Camera);
+    OpenGL_SetUniformVec3F(GameState->StaticRenderUnit.ShaderID, "ViewPosition", (f32 *) &ViewPosition, true);
+    OpenGL_SetUniformVec3F(GameState->SkinnedRenderUnit.ShaderID, "ViewPosition", (f32 *) &ViewPosition, true);
     
     //
     // NOTE: Render
@@ -982,8 +996,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                                               0.1f, 1000.0f);
             OpenGL_SetUniformMat4F(RenderUnit->ShaderID, "Projection", (f32 *) &ProjectionMat, false);
             
-            mat4 ViewMat = Mat4GetView(GameState->CameraPosition, GameState->CameraTheta, GameState->CameraPhi,
-                                       GameState->CameraIsFirstPerson ? 0.0f : GameState->CameraThirdPersonRadius);
+            mat4 ViewMat = CameraGetViewMat(&GameState->Camera);
             OpenGL_SetUniformMat4F(RenderUnit->ShaderID, "View", (f32 *) &ViewMat, false);
 
             PreviousShaderID = RenderUnit->ShaderID;
@@ -1031,7 +1044,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     {
                         u32 InstanceID = Mesh->InstanceIDs[InstanceSlotIndex];
                         if (InstanceID > 0 &&
-                            (InstanceID != GameState->PlayerWorldInstanceID || !GameState->CameraIsFirstPerson))
+                            (InstanceID != GameState->PlayerWorldInstanceID || GameState->Camera.IsThirdPerson))
                         {
                             // b32 ShouldLog = (InstanceID == 5);
                             world_object_instance *Instance = GameState->WorldObjectInstances + InstanceID;

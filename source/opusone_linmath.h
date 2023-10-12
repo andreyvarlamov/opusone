@@ -304,28 +304,6 @@ AreVecEqual(vec3 A, vec3 B)
 }
 
 internal inline vec3
-VecSphericalToCartesian(f32 Theta, f32 Phi)
-{
-    // NOTE: Using coordinate system ZXY; Theta = Angle from axis Z in direction of X (CCW);
-    // Phi = Angle from axis Y in direction ZX plane (CW, from top to down)
-    vec3 Result = {};
-
-    f32 ThetaRads = ToRadiansF(Theta);
-    f32 PhiRads = ToRadiansF(Phi);
-
-    f32 SinPhi = SinF(PhiRads);
-    f32 SinTheta = SinF(ThetaRads);
-    f32 CosPhi = CosF(PhiRads);
-    f32 CosTheta = CosF(ThetaRads);
-
-    Result.X = SinPhi * SinTheta;
-    Result.Y = CosPhi;
-    Result.Z = SinPhi * CosTheta;
-
-    return Result;
-}
-
-internal inline vec3
 Vec3Lerp(vec3 A, vec3 B, f32 LerpFactor)
 {
     vec3 Result = A + LerpFactor * (B - A);
@@ -1059,12 +1037,8 @@ TransformNormal(vec3 *Normal, quat Rotation, vec3 Scale)
 }
 
 internal inline mat4
-Mat4GetView(vec3 Position, f32 Theta, f32 Phi, f32 ThirdPersonRadius)
+Mat4GetView(vec3 Position, vec3 Front, vec3 Right, vec3 Up, f32 ThirdPersonRadius)
 {
-    vec3 Front = VecSphericalToCartesian(Theta, Phi);
-    vec3 Right = VecNormalize(VecCross(Front, Vec3(0,1,0)));
-    vec3 Up = VecCross(Right, Front);
-    
     mat4 Result = Mat4(1.0f);
     
     Result.E[0][0] =  Right.X;
@@ -1080,6 +1054,34 @@ Mat4GetView(vec3 Position, f32 Theta, f32 Phi, f32 ThirdPersonRadius)
     Result.E[3][1] = -VecDot(Up, Position);
     Result.E[3][2] =  VecDot(Front, Position) - ThirdPersonRadius;
 
+    return Result;
+}
+
+internal inline vec3
+GetCartesianVecFromYawPitch(f32 Yaw, f32 Pitch)
+{
+    f32 CosYaw = CosF(ToRadiansF(Yaw));
+    f32 CosPitch = CosF(ToRadiansF(Pitch));
+    f32 SinYaw = SinF(ToRadiansF(Yaw));
+    f32 SinPitch = SinF(ToRadiansF(Pitch));
+
+    vec3 Result = {};
+
+    Result.X = CosPitch * SinYaw;
+    Result.Y = SinPitch;
+    Result.Z = CosPitch * CosYaw;
+
+    return Result;
+}
+
+internal inline mat4
+Mat4GetView(vec3 Position, f32 Yaw, f32 Pitch, f32 ThirdPersonRadius)
+{
+    vec3 Front = GetCartesianVecFromYawPitch(Yaw, Pitch);
+    vec3 Right = VecNormalize(VecCross(Front, Vec3(0,1,0)));
+    vec3 Up = VecCross(Right, Front);
+
+    mat4 Result = Mat4GetView(Position, Front, Right, Up, ThirdPersonRadius);
     return Result;
 }
 
