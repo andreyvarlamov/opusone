@@ -8,6 +8,7 @@
 #include "opusone_animation.h"
 #include "opusone_immtext.h"
 #include "opusone_collision.h"
+#include "opusone_entity.h"
 
 #include <cstdio>
 #include <glad/glad.h>
@@ -63,92 +64,132 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->Camera.ThirdPersonRadius = 5.0f;
         GameState->Camera.IsThirdPerson = true;
 
-        //
-        // NOTE: Load models using assimp
-        //
-        simple_string ModelPaths[] = {
-            SimpleString("resources/models/box_room_separate/BoxRoomSeparate.gltf"),
-            SimpleString("resources/models/adam/adam_new.gltf"),
-            SimpleString("resources/models/complex_animation_keys/AnimationStudy2c.gltf"),
-            SimpleString("resources/models/container/Container.gltf"),
-            SimpleString("resources/models/snowman/Snowman.gltf"),
-        };
-
-        collision_type BlueprintCollisionTypes[] = {
-            COLLISION_TYPE_POLYHEDRON_SET,
-            COLLISION_TYPE_AABB,
-            COLLISION_TYPE_NONE,
-            COLLISION_TYPE_POLYHEDRON_SET,
-            COLLISION_TYPE_POLYHEDRON_SET
-        };
-
-        i32 ModelCount = ArrayCount(ModelPaths);
-        Assert(ModelCount == ArrayCount(BlueprintCollisionTypes));
-
-        GameState->WorldObjectBlueprintCount = ModelCount + 1;
-        GameState->WorldObjectBlueprints = MemoryArena_PushArray(&GameState->WorldArena,
-                                                                 GameState->WorldObjectBlueprintCount,
-                                                                 world_object_blueprint);
-        
-        for (u32 BlueprintIndex = 1;
-             BlueprintIndex < GameState->WorldObjectBlueprintCount;
-             ++BlueprintIndex)
+        GameState->EntityTypeSpecs = MemoryArena_PushArray(&GameState->WorldArena, EntityType_Count, entity_type_spec);
+        for (u32 EntityType = EntityType_None + 1;
+             EntityType < EntityType_Count;
+             ++EntityType)
         {
-            world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + BlueprintIndex;
-            *Blueprint = {};
-            
-            Blueprint->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, ModelPaths[BlueprintIndex-1].D);
-            Blueprint->CollisionType = BlueprintCollisionTypes[BlueprintIndex-1];
-            
-            switch (Blueprint->CollisionType)
+            entity_type_spec *Spec = GameState->EntityTypeSpecs + EntityType;
+
+            switch (EntityType)
             {
-                case COLLISION_TYPE_NONE:
+                case EntityType_BoxRoom:
                 {
-                    Blueprint->CollisionGeometry = 0;
+                    Spec->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, "resources/models/box_room_separate/BoxRoomSeparate.gltf");
+
+                    // TODO: Pull full initialization of a collision geometry based on type and imported model into a function
+                    {
+                        Spec->CollisionType = COLLISION_TYPE_POLYHEDRON_SET;
+                        Spec->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
+                        polyhedron_set *PolyhedronSet = &Spec->CollisionGeometry->PolyhedronSet;
+                        PolyhedronSet->PolyhedronCount = Spec->ImportedModel->MeshCount;
+                        PolyhedronSet->Polyhedra = MemoryArena_PushArray(&GameState->WorldArena, PolyhedronSet->PolyhedronCount, polyhedron);
+                    
+                        imported_mesh *ImportedMeshCursor = Spec->ImportedModel->Meshes;
+                        polyhedron *PolyhedronCursor = PolyhedronSet->Polyhedra;
+                        for (u32 MeshIndex = 0;
+                             MeshIndex < Spec->ImportedModel->MeshCount;
+                             ++MeshIndex, ++ImportedMeshCursor, ++PolyhedronCursor)
+                        {
+                            ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
+                                                          ImportedMeshCursor->VertexPositions, ImportedMeshCursor->VertexCount,
+                                                          ImportedMeshCursor->Indices, ImportedMeshCursor->IndexCount,
+                                                          PolyhedronCursor);
+                        }
+                    }
                 } break;
-                
-                case COLLISION_TYPE_AABB:
+
+                case EntityType_Player:
+                case EntityType_Enemy:
                 {
-                    // TODO: Handle properly for different models
+                    // TODO: I think it's asset importer's responsibility to be a little smarter, and not reload same models.
+                    // Will address redundant (e.g. player and enemy has same model, but different in other parts of the spec) loads later.
+                    Spec->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, "resources/models/adam/adam_new.gltf");
+
+                    // TODO: This info should come from the importer later
                     f32 AdamHeight = 1.8412f;
                     f32 AdamHalfHeight = AdamHeight * 0.5f;
 
-                    Blueprint->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
-                    Blueprint->CollisionGeometry->AABB = {};
-                    Blueprint->CollisionGeometry->AABB.Center = Vec3(0, AdamHalfHeight, 0);
-                    Blueprint->CollisionGeometry->AABB.Extents = Vec3 (0.3f, AdamHalfHeight, 0.3f);
-                } break;
-
-                case COLLISION_TYPE_POLYHEDRON_SET:
-                {
-                    Blueprint->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
-                    polyhedron_set *PolyhedronSet = &Blueprint->CollisionGeometry->PolyhedronSet;
-                    PolyhedronSet->PolyhedronCount = Blueprint->ImportedModel->MeshCount;
-                    PolyhedronSet->Polyhedra = MemoryArena_PushArray(&GameState->WorldArena, PolyhedronSet->PolyhedronCount, polyhedron);
-                    
-                    imported_mesh *ImportedMeshCursor = Blueprint->ImportedModel->Meshes;
-                    polyhedron *PolyhedronCursor = PolyhedronSet->Polyhedra;
-                    for (u32 MeshIndex = 0;
-                         MeshIndex < Blueprint->ImportedModel->MeshCount;
-                         ++MeshIndex, ++ImportedMeshCursor, ++PolyhedronCursor)
                     {
-                        ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
-                                                      ImportedMeshCursor->VertexPositions, ImportedMeshCursor->VertexCount,
-                                                      ImportedMeshCursor->Indices, ImportedMeshCursor->IndexCount,
-                                                      PolyhedronCursor);
+                        Spec->CollisionType = COLLISION_TYPE_AABB;
+                        Spec->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
+                        Spec->CollisionGeometry->AABB = {};
+                        Spec->CollisionGeometry->AABB.Center = Vec3(0, AdamHalfHeight, 0);
+                        Spec->CollisionGeometry->AABB.Extents = Vec3 (0.3f, AdamHalfHeight, 0.3f);
                     }
                 } break;
-                
+
+                case EntityType_Thing:
+                {
+                    Spec->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, "resources/models/complex_animation_keys/AnimationStudy2c.gltf");
+
+                    {
+                        Spec->CollisionType = COLLISION_TYPE_NONE;
+                        Spec->CollisionGeometry = 0;
+                    }
+                } break;
+
+                case EntityType_Container:
+                {
+                    Spec->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, "resources/models/container/Container.gltf");
+
+                    {
+                        Spec->CollisionType = COLLISION_TYPE_POLYHEDRON_SET;
+                        Spec->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
+                        polyhedron_set *PolyhedronSet = &Spec->CollisionGeometry->PolyhedronSet;
+                        PolyhedronSet->PolyhedronCount = Spec->ImportedModel->MeshCount;
+                        PolyhedronSet->Polyhedra = MemoryArena_PushArray(&GameState->WorldArena, PolyhedronSet->PolyhedronCount, polyhedron);
+                    
+                        imported_mesh *ImportedMeshCursor = Spec->ImportedModel->Meshes;
+                        polyhedron *PolyhedronCursor = PolyhedronSet->Polyhedra;
+                        for (u32 MeshIndex = 0;
+                             MeshIndex < Spec->ImportedModel->MeshCount;
+                             ++MeshIndex, ++ImportedMeshCursor, ++PolyhedronCursor)
+                        {
+                            ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
+                                                          ImportedMeshCursor->VertexPositions, ImportedMeshCursor->VertexCount,
+                                                          ImportedMeshCursor->Indices, ImportedMeshCursor->IndexCount,
+                                                          PolyhedronCursor);
+                        }
+                    }
+                } break;
+
+                case EntityType_Snowman:
+                {
+                    Spec->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, "resources/models/snowman/Snowman.gltf");
+
+                    {
+                        Spec->CollisionType = COLLISION_TYPE_POLYHEDRON_SET;
+                        Spec->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
+                        polyhedron_set *PolyhedronSet = &Spec->CollisionGeometry->PolyhedronSet;
+                        PolyhedronSet->PolyhedronCount = Spec->ImportedModel->MeshCount;
+                        PolyhedronSet->Polyhedra = MemoryArena_PushArray(&GameState->WorldArena, PolyhedronSet->PolyhedronCount, polyhedron);
+                    
+                        imported_mesh *ImportedMeshCursor = Spec->ImportedModel->Meshes;
+                        polyhedron *PolyhedronCursor = PolyhedronSet->Polyhedra;
+                        for (u32 MeshIndex = 0;
+                             MeshIndex < Spec->ImportedModel->MeshCount;
+                             ++MeshIndex, ++ImportedMeshCursor, ++PolyhedronCursor)
+                        {
+                            ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
+                                                          ImportedMeshCursor->VertexPositions, ImportedMeshCursor->VertexCount,
+                                                          ImportedMeshCursor->Indices, ImportedMeshCursor->IndexCount,
+                                                          PolyhedronCursor);
+                        }
+                    }
+                } break;
+
                 default:
                 {
                     InvalidCodePath;
                 } break;
             }
         }
-
+        
         //
         // NOTE: Initialize render units
         //
+        // NOTE: Skinned and static mesh render units
         u32 MaterialsForStaticCount = 0;
         u32 MeshesForStaticCount = 0;
         u32 VerticesForStaticCount = 0;
@@ -158,12 +199,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         u32 VerticesForSkinnedCount = 0;
         u32 IndicesForSkinnedCount = 0;
         
-        for (u32 BlueprintIndex = 1;
-             BlueprintIndex < GameState->WorldObjectBlueprintCount;
-             ++BlueprintIndex)
+        for (u32 EntityType = EntityType_None + 1;
+             EntityType < EntityType_Count;
+             ++EntityType)
         {
-            world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + BlueprintIndex;
-            imported_model *ImportedModel = Blueprint->ImportedModel;
+            entity_type_spec *Spec = GameState->EntityTypeSpecs + EntityType;
+            imported_model *ImportedModel = Spec->ImportedModel;
 
             u32 *MaterialCount;
             u32 *MeshCount;
@@ -215,7 +256,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                  false, false, SkinnedShader, &GameState->RenderArena);
         }
 
-        // Debug draw render unit
+        // NOTE: Debug draw render unit
         {
             u32 MaxMarkers = 1024 * 3;
             u32 MaxVertices = 16384 * 3;
@@ -226,7 +267,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                  &GameState->RenderArena);
         }
 
-        // ImmText render unit
+        // NOTE: ImmText render unit
         {
             u32 MaxMarkers = 1024;
             u32 MaxVertices = 16384;
@@ -240,12 +281,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         //
         // NOTE: Prepare render data from the imported data
         //
-        for (u32 BlueprintIndex = 1;
-             BlueprintIndex < GameState->WorldObjectBlueprintCount;
-             ++BlueprintIndex)
+        for (u32 EntityType = EntityType_None + 1;
+             EntityType < EntityType_Count;
+             ++EntityType)
         {
-            world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + BlueprintIndex;
-            imported_model *ImportedModel = Blueprint->ImportedModel;
+            entity_type_spec *Spec = GameState->EntityTypeSpecs + EntityType;
+            imported_model *ImportedModel = Spec->ImportedModel;
 
             render_unit *RenderUnit;
 
@@ -339,9 +380,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                            ImportedMesh->VertexCount, ImportedMesh->IndexCount);
             }
 
-            Blueprint->RenderUnit = RenderUnit;
-            Blueprint->BaseMeshID = RenderUnit->MarkerCount;
-            Blueprint->MeshCount = ImportedModel->MeshCount;
+            Spec->RenderUnit = RenderUnit;
+            Spec->BaseMeshID = RenderUnit->MarkerCount;
+            Spec->MeshCount = ImportedModel->MeshCount;
 
             RenderUnit->MaterialCount += ImportedModel->MaterialCount - ((ImportedModel->MaterialCount == 0) ? 0 : 1);
             RenderUnit->MarkerCount += ImportedModel->MeshCount;
@@ -364,109 +405,30 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         glEnable(GL_LINE_SMOOTH);
 
         //
-        // NOTE: Add instances of world object blueprints
+        // NOTE: Add entities
         //
-        world_object_instance Instances[] = {
-            world_object_instance { 1, Vec3(0.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 1, Vec3(20.0f,0.0f, 0.0f), Quat(Vec3(0.0f, 1.0f, 1.0f), ToRadiansF(45.0f)), Vec3(0.5f, 1.0f, 2.0f) },
-            world_object_instance { 1, Vec3(0.0f,0.0f,-30.0f), Quat(Vec3(1.0f, 1.0f,1.0f), ToRadiansF(160.0f)), Vec3(1.0f, 1.0f, 5.0f) },
-            world_object_instance { 2, Vec3(0.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 2, Vec3(-1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 2, Vec3(1.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 2, Vec3(2.0f, 0.0f, 0.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 3, Vec3(0.0f, 0.0f, -3.0f), Quat(), Vec3(0.3f, 0.3f, 0.3f) },
-            world_object_instance { 4, Vec3(-3.0f, 0.0f, -3.0f), Quat(Vec3(0,1,0), ToRadiansF(45.0f)), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 2, Vec3(0.0f, 0.1f, 5.0f), Quat(Vec3(0,1,0), ToRadiansF(0.0f)), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 4, Vec3(-3.0f, 0.0f, 3.0f), Quat(), Vec3(1.0f, 1.0f, 1.0f) },
-            world_object_instance { 5, Vec3(5.0f, 0.0f, 5.0f), Quat(), Vec3(3,3,3) },
-            world_object_instance { 4, Vec3(3,0,-3), Quat(Vec3(1,1,0), ToRadiansF(60)), Vec3(1,1,1) },
+        GameState->EntityCount = 0;
 
-        };
+        AddEntity(GameState, EntityType_BoxRoom, Vec3(0), Quat(), Vec3(1));
+        AddEntity(GameState, EntityType_BoxRoom, Vec3(20,0,0), Quat(Vec3(0,1,1), ToRadiansF(45)), Vec3(0.5f,1,2));
+        AddEntity(GameState, EntityType_BoxRoom, Vec3(0,0,-30), Quat(Vec3(1), ToRadiansF(160)), Vec3(1,1,5));
+        AddEntity(GameState, EntityType_Enemy, Vec3(-1,0,0), Quat(), Vec3(1));
+        AddEntity(GameState, EntityType_Enemy, Vec3(0), Quat(), Vec3(1));
+        AddEntity(GameState, EntityType_Enemy, Vec3(1,0,0), Quat(), Vec3(1));
+        AddEntity(GameState, EntityType_Enemy, Vec3(2,0,0), Quat(), Vec3(1));
+        AddEntity(GameState, EntityType_Thing, Vec3(0,0,-3), Quat(), Vec3(0.3f));
+        AddEntity(GameState, EntityType_Container, Vec3(-3,0,3), Quat(), Vec3(1));
+        AddEntity(GameState, EntityType_Container, Vec3(-3,0,-3), Quat(Vec3(0,1,0), ToRadiansF(45)), Vec3(1));
+        AddEntity(GameState, EntityType_Container, Vec3(3,0,-3), Quat(Vec3(1,1,0), ToRadiansF(60)), Vec3(1));
+        AddEntity(GameState, EntityType_Snowman, Vec3(5,0,5), Quat(), Vec3(3));
+        GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(0,0.1f,5), Quat(), Vec3(1));
 
-        GameState->WorldObjectInstanceCount = ArrayCount(Instances) + 1;
-        GameState->WorldObjectInstances = MemoryArena_PushArray(&GameState->WorldArena,
-                                                                GameState->WorldObjectInstanceCount,
-                                                                world_object_instance);
-
+        // NOTE: Misc data that probably should be set somewhere else
         GameState->PlayerEyeHeight = 1.7f;
-        GameState->PlayerWorldInstanceID = 10;
-        
-        for (u32 InstanceIndex = 1;
-             InstanceIndex < GameState->WorldObjectInstanceCount;
-             ++InstanceIndex)
-        {
-            world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
-            *Instance = Instances[InstanceIndex-1];
-
-            Assert(Instance->BlueprintID > 0);
-            
-            world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
-
-            if (Blueprint->ImportedModel->Armature)
-            {
-                Assert(Blueprint->ImportedModel->Animations);
-                Assert(Blueprint->ImportedModel->AnimationCount > 0);
-
-                if (InstanceIndex == GameState->PlayerWorldInstanceID)
-                {
-                    Instance->AnimationState = 0;
-                }
-                else
-                {
-                    Instance->AnimationState = MemoryArena_PushStruct(&GameState->WorldArena, animation_state);
-
-                    Instance->AnimationState->Armature = Blueprint->ImportedModel->Armature;
-                
-                    if (Instance->BlueprintID == 2)
-                    {
-                        // NOTE: Adam: default animation - running
-                        Instance->AnimationState->Animation = Blueprint->ImportedModel->Animations + 2;
-                    }
-                    else if (Instance->BlueprintID == 3)
-                    {
-                        Instance->AnimationState->Animation = Blueprint->ImportedModel->Animations;
-                    }
-                    else
-                    {
-                        // NOTE: All models with armature should have animation in animation state set
-                        InvalidCodePath;
-                    }
-                    Instance->AnimationState->CurrentTicks = 0.0f;
-                }
-            }
-
-            render_unit *RenderUnit = Blueprint->RenderUnit;
-
-            for (u32 MeshIndex = 0;
-                 MeshIndex < Blueprint->MeshCount;
-                 ++MeshIndex)
-            {
-                render_marker *Marker = RenderUnit->Markers + Blueprint->BaseMeshID + MeshIndex;
-                Assert(Marker->StateT == RENDER_STATE_MESH);
-                render_state_mesh *Mesh = &Marker->StateD.Mesh;
-
-                b32 SlotFound = false;
-                for (u32 SlotIndex = 0;
-                     SlotIndex < MAX_INSTANCES_PER_MESH;
-                     ++SlotIndex)
-                {
-                    if (Mesh->InstanceIDs[SlotIndex] == 0)
-                    {
-                        Mesh->InstanceIDs[SlotIndex] = InstanceIndex;
-                        SlotFound = true;
-                        break;
-                    }
-                }
-                Assert(SlotFound);
-            }
-        }
-
-        // NOTE: Set the player movement spec
         GameState->PlayerSpecJumpVelocity = 100.0f;
         GameState->PlayerSpecAccelerationValue = 300.0f;
         GameState->PlayerSpecGravityValue = -500.0f;
         GameState->PlayerSpecDragValue = 50.0f;
-
     }
 
     //
@@ -542,8 +504,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     CameraSetDeltaOrientation(&GameState->Camera, CameraDeltaYaw, CameraDeltaPitch, CameraDeltaRadius);
     
     // NOTE: Updates requested by controls (player)
-    world_object_instance *PlayerInstance = GameState->WorldObjectInstances + GameState->PlayerWorldInstanceID;
-    world_object_blueprint *PlayerBlueprint = GameState->WorldObjectBlueprints + PlayerInstance->BlueprintID;
+    entity *Player = GameState->PlayerEntity;
+    entity_type_spec *PlayerSpec = GameState->EntityTypeSpecs + EntityType_Player;
 
     if (RequestedControls->CameraIsIndependent)
     {
@@ -562,7 +524,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             GameState->CameraWillReset = false;
         }
         
-        PlayerInstance->Rotation = CameraGetYawQuat(&GameState->Camera);
+        Player->WorldPosition.R = CameraGetYawQuat(&GameState->Camera);
     }
 
     vec3 PlayerAcceleration = {};
@@ -575,7 +537,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         if (RequestedControls->PlayerDown) PlayerAcceleration.Y -= 1.0f;
         if (RequestedControls->PlayerUp) PlayerAcceleration.Y += 1.0f;
     }
-    PlayerAcceleration = GameState->PlayerSpecAccelerationValue * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), PlayerInstance->Rotation);
+    PlayerAcceleration = GameState->PlayerSpecAccelerationValue * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), Player->WorldPosition.R);
 
     if (!GameState->GravityDisabledTemp)
     {
@@ -586,7 +548,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             GameState->PlayerAirborne = true;
             GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
         }
-        if (GameState->PlayerAirborne && PlayerInstance->Position.Y < 0.1f)
+        if (GameState->PlayerAirborne && Player->WorldPosition.P.Y < 0.1f)
         {
             GameState->PlayerAirborne = false;
         }
@@ -607,29 +569,29 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     ImmText_DrawQuickString(SimpleStringF("Player velocity: {%0.3f,%0.3f,%0.3f}",
                                           GameState->PlayerVelocity.X, GameState->PlayerVelocity.Y, GameState->PlayerVelocity.Z).D);
     ImmText_DrawQuickString(SimpleStringF("Player position: {%0.3f,%0.3f,%0.3f}",
-                                          PlayerInstance->Position.X, PlayerInstance->Position.Y, PlayerInstance->Position.Z).D);
+                                          Player->WorldPosition.P.X, Player->WorldPosition.P.Y, Player->WorldPosition.P.Z).D);
 
     // NOTE: Entity AI updates
     // ....
 
     // NOTE: Process entity movement
 #if 0
-    for (u32 InstanceIndex = 1;
-         InstanceIndex < GameState->WorldObjectInstanceCount;
-         ++InstanceIndex)
+    for (u32 EntityIndex = 0;
+         EntityIndex < GameState->EntityCount;
+         ++EntityIndex)
     {
-        world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
-        world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
+        entity *Entity = GameState->Entities + EntityIndex;
+        entity_type_spec *Spec = GameState->EntityTypeSpecs + Entity->Type;
 
-        if (Blueprint->CollisionType == COLLISION_TYPE_POLYHEDRON_SET)
+        if (Spec->CollisionType == COLLISION_TYPE_POLYHEDRON_SET)
         {
-            Assert(Blueprint->CollisionGeometry);
+            Assert(Spec->CollisionGeometry);
             
             polyhedron_set *PolyhedronSet = CopyAndTransformPolyhedronSet(&GameState->TransientArena,
-                                                                          &Blueprint->CollisionGeometry->PolyhedronSet,
-                                                                          Instance->Position,
-                                                                          Instance->Rotation,
-                                                                          Instance->Scale);
+                                                                          &Spec->CollisionGeometry->PolyhedronSet,
+                                                                          Entity->WorldPosition.P,
+                                                                          Entity->WorldPosition.R,
+                                                                          Entity->WorldPosition.S);
 
             Assert(PolyhedronSet->PolyhedronCount > 0);
 
@@ -677,7 +639,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
 #endif
 
-    Assert(PlayerBlueprint->CollisionGeometry);
+    Assert(PlayerSpec->CollisionGeometry);
     vec3 CardinalAxes[] = { Vec3(1,0,0), Vec3(0,1,0), Vec3(0,0,1) };
 
     u32 CollisionIterations = COLLISION_ITERATIONS + 1; // NOTE: Last iteration is only to check if can move after prev iteration
@@ -695,15 +657,15 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
 
         box PlayerBox = {};
-        PlayerBox.Center = PlayerInstance->Position + PlayerTranslation + PlayerBlueprint->CollisionGeometry->AABB.Center;
-        PlayerBox.Extents = PlayerBlueprint->CollisionGeometry->AABB.Extents;
+        PlayerBox.Center = Player->WorldPosition.P + PlayerTranslation + PlayerSpec->CollisionGeometry->AABB.Center;
+        PlayerBox.Extents = PlayerSpec->CollisionGeometry->AABB.Extents;
         PlayerBox.Axes[0] = CardinalAxes[0];
         PlayerBox.Axes[1] = CardinalAxes[1];
         PlayerBox.Axes[2] = CardinalAxes[2];
 
         f32 SmallestPenetrationDepth = FLT_MAX;
         vec3 CollisionNormal = {};
-        u32 InstanceToResolveThisIteration = 0;
+        u32 EntityToResolveThisIteration = 0;
         
         b32 TranslationWillWorsenACollision = false;
         
@@ -712,16 +674,16 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             Breakpoint;
         }
             
-        for (u32 InstanceIndex = 1;
-             InstanceIndex < GameState->WorldObjectInstanceCount;
-             ++InstanceIndex)
+        for (u32 EntityIndex = 0;
+             EntityIndex < GameState->EntityCount;
+             ++EntityIndex)
         {
-            if (InstanceIndex != GameState->PlayerWorldInstanceID)
+            entity *Entity = GameState->Entities + EntityIndex;
+            if (Entity != Player)
             {
-                world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
-                world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
+                entity_type_spec *Spec = GameState->EntityTypeSpecs + Entity->Type;
 
-                switch (Blueprint->CollisionType)
+                switch (Spec->CollisionType)
                 {
                     case COLLISION_TYPE_NONE:
                     {
@@ -731,10 +693,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     case COLLISION_TYPE_POLYHEDRON_SET:
                     {
                         polyhedron_set *PolyhedronSet = CopyAndTransformPolyhedronSet(&GameState->TransientArena,
-                                                                                      &Blueprint->CollisionGeometry->PolyhedronSet,
-                                                                                      Instance->Position,
-                                                                                      Instance->Rotation,
-                                                                                      Instance->Scale);
+                                                                                      &Spec->CollisionGeometry->PolyhedronSet,
+                                                                                      Entity->WorldPosition.P,
+                                                                                      Entity->WorldPosition.R,
+                                                                                      Entity->WorldPosition.S);
                         
                         polyhedron *Polyhedron = PolyhedronSet->Polyhedra;
                         for (u32 PolyhedronIndex = 0;
@@ -754,7 +716,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                 SmallestPenetrationDepth = ThisPenetrationDepth;
                                 CollisionNormal =ThisCollisionNormal;
                                 TranslationWillWorsenACollision = true;
-                                InstanceToResolveThisIteration = InstanceIndex;
+                                EntityToResolveThisIteration = EntityIndex;
 
                                 edge *EdgeCursor = Polyhedron->Edges;
                                 for (u32 TestPolyhedronEdgeIndex = 0;
@@ -789,8 +751,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 
                     case COLLISION_TYPE_AABB:
                     {
-                        Assert(Blueprint->CollisionGeometry);
-                        aabb *AABB = &Blueprint->CollisionGeometry->AABB;
+                        Assert(Spec->CollisionGeometry);
+                        aabb *AABB = &Spec->CollisionGeometry->AABB;
 
                         f32 ThisPenetrationDepth = FLT_MAX;
                         vec3 ThisCollisionNormal = {};
@@ -804,7 +766,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             f32 PlayerMin = PlayerCenter - PlayerBox.Extents.E[AxisIndex];
                             f32 PlayerMax = PlayerCenter + PlayerBox.Extents.E[AxisIndex];
 
-                            f32 OtherCenter = Instance->Position.E[AxisIndex] + AABB->Center.E[AxisIndex];
+                            f32 OtherCenter = Entity->WorldPosition.P.E[AxisIndex] + AABB->Center.E[AxisIndex];
                             f32 OtherMin = OtherCenter - AABB->Extents.E[AxisIndex];
                             f32 OtherMax = OtherCenter + AABB->Extents.E[AxisIndex];
 
@@ -836,10 +798,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             SmallestPenetrationDepth = ThisPenetrationDepth;
                             CollisionNormal = ThisCollisionNormal;
                             TranslationWillWorsenACollision = true;
-                            InstanceToResolveThisIteration = InstanceIndex;
+                            EntityToResolveThisIteration = EntityIndex;
                         }
 
-                        DD_DrawQuickAABox(Instance->Position + AABB->Center, AABB->Extents, SeparatingAxisFound ? Vec3(0,1,0) : Vec3(1,0,0));
+                        DD_DrawQuickAABox(Entity->WorldPosition.P + AABB->Center, AABB->Extents, SeparatingAxisFound ? Vec3(0,1,0) : Vec3(1,0,0));
                     } break;
 
                     default:
@@ -874,54 +836,54 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
             PlayerTranslation -= CollidingTranslationComponent;
 
-            DD_DrawQuickVector(PlayerInstance->Position, PlayerInstance->Position + CollisionNormal, Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
-            ImmText_DrawQuickString(SimpleStringF("Collision: Iteration#%d: Instance#%d",
-                                                  IterationIndex, InstanceToResolveThisIteration).D);
+            DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + CollisionNormal, Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
+            ImmText_DrawQuickString(SimpleStringF("Collision: Iteration#%d: Entity#%d",
+                                                  IterationIndex, EntityToResolveThisIteration).D);
         }
     }
 
     if (TranslationIsSafe)
     {
-        PlayerInstance->Position += PlayerTranslation;
-        CameraSetWorldPosition(&GameState->Camera, PlayerInstance->Position + Vec3(0, GameState->PlayerEyeHeight,0));
+        Player->WorldPosition.P += PlayerTranslation;
+        CameraSetWorldPosition(&GameState->Camera, Player->WorldPosition.P + Vec3(0, GameState->PlayerEyeHeight,0));
     }
 
-    DD_DrawQuickAABox(PlayerInstance->Position + PlayerBlueprint->CollisionGeometry->AABB.Center,
-                      PlayerBlueprint->CollisionGeometry->AABB.Extents,
+    DD_DrawQuickAABox(Player->WorldPosition.P + PlayerSpec->CollisionGeometry->AABB.Center,
+                      PlayerSpec->CollisionGeometry->AABB.Extents,
                       PlayerTranslationWasAdjusted ? Vec3(1,0,0) : Vec3(0,1,0));
 
     // NOTE: Mouse picking
     vec3 CameraFront = CameraGetFront(&GameState->Camera);
     
-    vec3 RayPosition = PlayerInstance->Position + Vec3(0,GameState->PlayerEyeHeight,0);
+    vec3 RayPosition = Player->WorldPosition.P + Vec3(0,GameState->PlayerEyeHeight,0);
     vec3 RayDirection = CameraFront;
     f32 RayTMin = FLT_MAX;
-    u32 ClosestInstanceIndex = 0;
+    u32 ClosestEntityIndex = 0;
     
-    for (u32 InstanceIndex = 1;
-         InstanceIndex < GameState->WorldObjectInstanceCount;
-         ++InstanceIndex)
+    for (u32 EntityIndex = 0;
+         EntityIndex < GameState->EntityCount;
+         ++EntityIndex)
     {
-        if (InstanceIndex != GameState->PlayerWorldInstanceID)
+        entity *Entity = GameState->Entities + EntityIndex;
+        if (Entity != Player)
         {
-            world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
-            world_object_blueprint *Blueprint = GameState->WorldObjectBlueprints + Instance->BlueprintID;
+            entity_type_spec *Spec = GameState->EntityTypeSpecs + Entity->Type;
 
-            switch (Blueprint->CollisionType)
+            switch (Spec->CollisionType)
             {
                 case COLLISION_TYPE_AABB:
                 {
-                    Assert(Blueprint->CollisionGeometry);
-                    aabb *AABB = &Blueprint->CollisionGeometry->AABB;
+                    Assert(Spec->CollisionGeometry);
+                    aabb *AABB = &Spec->CollisionGeometry->AABB;
 
                     f32 ThisTMin;
                     b32 IsRayIntersecting =
-                        IntersectRayAABB(RayPosition, RayDirection, AABB->Center + Instance->Position, AABB->Extents, &ThisTMin, 0);
+                        IntersectRayAABB(RayPosition, RayDirection, AABB->Center + Player->WorldPosition.P, AABB->Extents, &ThisTMin, 0);
 
                     if (IsRayIntersecting && ThisTMin < RayTMin)
                     {
                         RayTMin = ThisTMin;
-                        ClosestInstanceIndex = InstanceIndex;
+                        ClosestEntityIndex = EntityIndex;
                     }
                 } break;
 
@@ -933,9 +895,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
     }
 
-    if (ClosestInstanceIndex > 0)
+    if (ClosestEntityIndex > 0)
     {
-        ImmText_DrawQuickString(SimpleStringF("Looking at inst#%d", ClosestInstanceIndex).D);
+        ImmText_DrawQuickString(SimpleStringF("Looking at entity#%d", ClosestEntityIndex).D);
     }
 
     if (!GameState->Camera.IsThirdPerson)
@@ -943,19 +905,19 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         DD_DrawPoint(&GameState->DebugDrawRenderUnit, GameState->Camera.Position + CameraGetFront(&GameState->Camera), Vec3(1), 4);
     }
     
-    for (u32 InstanceIndex = 0;
-         InstanceIndex < GameState->WorldObjectInstanceCount;
-         ++InstanceIndex)
+    for (u32 EntityIndex = 0;
+         EntityIndex < GameState->EntityCount;
+         ++EntityIndex)
     {
-        world_object_instance *Instance = GameState->WorldObjectInstances + InstanceIndex;
+        entity *Entity = GameState->Entities + EntityIndex;
 
-        if (Instance->AnimationState)
+        if (Entity->AnimationState)
         {
-            f32 DeltaTicks = (f32) (GameInput->DeltaTime * (Instance->AnimationState->Animation->TicksPerSecond));
-            Instance->AnimationState->CurrentTicks += DeltaTicks;
-            if (Instance->AnimationState->CurrentTicks >= Instance->AnimationState->Animation->TicksDuration)
+            f32 DeltaTicks = (f32) (GameInput->DeltaTime * (Entity->AnimationState->Animation->TicksPerSecond));
+            Entity->AnimationState->CurrentTicks += DeltaTicks;
+            if (Entity->AnimationState->CurrentTicks >= Entity->AnimationState->Animation->TicksDuration)
             {
-                Instance->AnimationState->CurrentTicks -= Instance->AnimationState->Animation->TicksDuration;
+                Entity->AnimationState->CurrentTicks -= Entity->AnimationState->Animation->TicksDuration;
             }
         }
     }
@@ -1042,36 +1004,27 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                          InstanceSlotIndex < MAX_INSTANCES_PER_MESH;
                          ++InstanceSlotIndex)
                     {
-                        u32 InstanceID = Mesh->InstanceIDs[InstanceSlotIndex];
-                        if (InstanceID > 0 &&
-                            (InstanceID != GameState->PlayerWorldInstanceID || GameState->Camera.IsThirdPerson))
+                        entity *Entity = Mesh->EntityInstances[InstanceSlotIndex];
+                        if (Entity && (Entity != Player || GameState->Camera.IsThirdPerson))
                         {
-                            // b32 ShouldLog = (InstanceID == 5);
-                            world_object_instance *Instance = GameState->WorldObjectInstances + InstanceID;
-
-                            if (Instance->IsInvisible)
+                            if (Entity->IsInvisible)
                             {
                                 continue;
                             }
 
-                            mat4 ModelTransform = Mat4GetFullTransform(Instance->Position, Instance->Rotation, Instance->Scale);
+                            mat4 ModelTransform = WorldPositionTransform(&Entity->WorldPosition);
 
-                            if (InstanceID == GameState->PlayerWorldInstanceID)
+                            if (Entity->AnimationState)
                             {
-                                Noop;
-                            }
-
-                            if (Instance->AnimationState)
-                            {
-                                imported_armature *Armature = Instance->AnimationState->Armature;
-                                u32 BoneCount = Instance->AnimationState->Armature->BoneCount;
+                                imported_armature *Armature = Entity->AnimationState->Armature;
+                                u32 BoneCount = Entity->AnimationState->Armature->BoneCount;
                         
                                 MemoryArena_Freeze(&GameState->RenderArena);
                                 mat4 *BoneTransforms = MemoryArena_PushArray(&GameState->RenderArena,
                                                                              BoneCount,
                                                                              mat4);
                                                                      
-                                ComputeTransformsForAnimation(Instance->AnimationState, BoneTransforms, BoneCount);
+                                ComputeTransformsForAnimation(Entity->AnimationState, BoneTransforms, BoneCount);
                         
                                 for (u32 BoneIndex = 0;
                                      BoneIndex < BoneCount;
@@ -1152,7 +1105,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     {
                         glEnable(GL_DEPTH_TEST);
                     }
-                   
                     
                     glDrawElementsBaseVertex(DebugMarker->IsPointMode ? GL_POINTS : GL_LINES,
                                              Marker->IndexCount,
@@ -1219,3 +1171,4 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 #include "opusone_animation.cpp"
 #include "opusone_immtext.cpp"
 #include "opusone_collision.cpp"
+#include "opusone_entity.cpp"

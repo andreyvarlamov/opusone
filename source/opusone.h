@@ -10,31 +10,7 @@
 #include "opusone_animation.h"
 #include "opusone_immtext.h"
 #include "opusone_collision.h"
-
-struct world_object_blueprint
-{
-    imported_model *ImportedModel;
-
-    render_unit *RenderUnit;
-    u32 BaseMeshID;
-    u32 MeshCount;
-
-    collision_geometry *CollisionGeometry;
-    collision_type CollisionType;
-};
-
-struct world_object_instance
-{
-    u32 BlueprintID;
-    
-    vec3 Position;
-    quat Rotation;
-    vec3 Scale;
-
-    b32 IsInvisible;
-    
-    animation_state *AnimationState;
-};
+#include "opusone_entity.h"
 
 struct game_requested_controls
 {
@@ -75,21 +51,20 @@ struct game_state
     render_unit SkinnedRenderUnit;
     render_unit DebugDrawRenderUnit;
     render_unit ImmTextRenderUnit;
-    
-    u32 WorldObjectBlueprintCount;
-    world_object_blueprint *WorldObjectBlueprints;
-    
-    u32 WorldObjectInstanceCount;
-    world_object_instance *WorldObjectInstances;
+
+    entity_type_spec *EntityTypeSpecs;
+
+    u32 EntityCount;
+    entity Entities[100]; // TODO: This should be a bucket array / spatial hash table eventually
 
     font_info *ContrailOne;
     font_info *MajorMono;
 
+    entity *PlayerEntity;
+    
     f32 PlayerEyeHeight;
-    u32 PlayerWorldInstanceID;
     vec3 PlayerVelocity;
     b32 PlayerAirborne;
-    
     f32 PlayerSpecJumpVelocity;
     f32 PlayerSpecAccelerationValue;
     f32 PlayerSpecGravityValue;

@@ -44,10 +44,11 @@ enum render_state_type
 // matrices, and put them in the right order for the renderer.
 // Also this will decouple render data from world_object/entity/position, which is more of a game logic thing.
 #define MAX_INSTANCES_PER_MESH 16
+struct entity;
 struct render_state_mesh
 {
     u32 MaterialID;
-    u32 InstanceIDs[MAX_INSTANCES_PER_MESH];
+    entity *EntityInstances[MAX_INSTANCES_PER_MESH];
 };
 
 struct render_state_debug
