@@ -71,9 +71,19 @@ main(int Argc, char *Argv[])
     f64 PrevFrameDeltaTimeSec = 0.0f;
     f64 FPS = 0.0f;
 
+#if 0
+    i32 OldSwapInterval = SDL_GL_GetSwapInterval();
+    i32 SetSwapResult = SDL_GL_SetSwapInterval(0);
+    i32 NewSwapInterval = SDL_GL_GetSwapInterval();
+    printf("PLATFORM: OldSwapInterval: %d, SetSwapResult: %d, NewSwapInterval: %d\n",
+           OldSwapInterval, SetSwapResult, NewSwapInterval);
+#endif
+
     b32 ShouldQuit = false;
     while (!ShouldQuit)
     {
+        glFinish(); // TODO: Still need more research and experimentation to decide if I want to do this
+        
         SDL_Event SDLEvent;
         while (SDL_PollEvent(&SDLEvent))
         {

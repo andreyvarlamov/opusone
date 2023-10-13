@@ -1,7 +1,9 @@
 #include "opusone_collision.h"
 
+#include "opusone.h"
 #include "opusone_common.h"
 #include "opusone_linmath.h"
+#include "opusone_debug_draw.cpp"
 
 b32
 ValidateEdgesUnique(memory_arena *TransientArena, edge *Edges, u32 EdgeCount)
@@ -963,4 +965,157 @@ IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, 
     }
 
     return true;
+}
+
+collision_contact
+CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation)
+{
+    entity_type_spec *Spec = GameState->EntityTypeSpecs + Entity->Type;
+    Assert(Spec->CollisionType == COLLISION_TYPE_AABB);
+    Assert(Spec->CollisionGeometry);
+    
+    box EntityBox = {};
+    EntityBox.Center = Entity->WorldPosition.P + EntityTranslation + Spec->CollisionGeometry->AABB.Center;
+    EntityBox.Extents = Spec->CollisionGeometry->AABB.Extents;
+    EntityBox.Axes[0] = Vec3(1,0,0);
+    EntityBox.Axes[1] = Vec3(0,1,0);
+    EntityBox.Axes[2] = Vec3(0,0,1);
+
+    collision_contact ClosestContact = CollisionContact();
+    
+    for (u32 EntityIndex = 0;
+         EntityIndex < GameState->EntityCount;
+         ++EntityIndex)
+    {
+        entity *TestEntity = GameState->Entities + EntityIndex;
+        if (TestEntity != Entity)
+        {
+            entity_type_spec *TestSpec = GameState->EntityTypeSpecs + TestEntity->Type;
+
+            switch (TestSpec->CollisionType)
+            {
+                case COLLISION_TYPE_NONE:
+                {
+                    continue;
+                } break;
+
+                case COLLISION_TYPE_POLYHEDRON_SET:
+                {
+                    polyhedron_set *PolyhedronSet = CopyAndTransformPolyhedronSet(&GameState->TransientArena,
+                                                                                  &TestSpec->CollisionGeometry->PolyhedronSet,
+                                                                                  TestEntity->WorldPosition.P,
+                                                                                  TestEntity->WorldPosition.R,
+                                                                                  TestEntity->WorldPosition.S);
+                        
+                    polyhedron *Polyhedron = PolyhedronSet->Polyhedra;
+                    for (u32 PolyhedronIndex = 0;
+                         PolyhedronIndex < PolyhedronSet->PolyhedronCount;
+                         ++PolyhedronIndex, ++Polyhedron)
+                    {
+                        f32 ThisPenetrationDepth;
+                        vec3 ThisCollisionNormal;
+                        b32 AreSeparated =
+                            AreSeparatedBoxPolyhedron(Polyhedron, &EntityBox, &ThisCollisionNormal, &ThisPenetrationDepth);
+
+                        if (!AreSeparated &&
+                            VecDot(ThisCollisionNormal, EntityTranslation) < -FLT_EPSILON &&
+                            (ThisPenetrationDepth < ClosestContact.Depth))
+                        {
+                            ClosestContact.Depth = ThisPenetrationDepth;
+                            ClosestContact.Normal = ThisCollisionNormal;
+                            ClosestContact.Entity = TestEntity;
+
+                            edge *EdgeCursor = Polyhedron->Edges;
+                            for (u32 TestPolyhedronEdgeIndex = 0;
+                                 TestPolyhedronEdgeIndex < Polyhedron->EdgeCount;
+                                 ++TestPolyhedronEdgeIndex, ++EdgeCursor)
+                            {
+                                DD_DrawQuickVector(Polyhedron->Vertices[EdgeCursor->AIndex],
+                                                   Polyhedron->Vertices[EdgeCursor->BIndex],
+                                                   Vec3(1,0,1));
+                            }
+                
+                            polygon *FaceCursor = Polyhedron->Faces;
+                            for (u32 FaceIndex = 0;
+                                 FaceIndex < Polyhedron->FaceCount;
+                                 ++FaceIndex, ++FaceCursor)
+                            {
+                                vec3 FaceCentroid = Vec3();
+                                for (u32 VertexIndex = 0;
+                                     VertexIndex < FaceCursor->VertexCount;
+                                     ++VertexIndex)
+                                {
+                                    FaceCentroid += Polyhedron->Vertices[FaceCursor->VertexIndices[VertexIndex]];
+                                }
+                                FaceCentroid /= (f32) FaceCursor->VertexCount;
+                                DD_DrawQuickVector(FaceCentroid, FaceCentroid + 0.25f*FaceCursor->Plane.Normal, Vec3(1,1,1));
+                            }
+                        }
+                    }
+                } break;
+                
+                case COLLISION_TYPE_AABB:
+                {
+                    Assert(TestSpec->CollisionGeometry);
+                    aabb *TestAABB = &TestSpec->CollisionGeometry->AABB;
+
+                    f32 ThisPenetrationDepth = FLT_MAX;
+                    vec3 ThisCollisionNormal = {};
+                        
+                    b32 SeparatingAxisFound = false;
+                    for (u32 AxisIndex = 0;
+                         AxisIndex < 3;
+                         ++AxisIndex)
+                    {
+                        f32 EntityCenter = EntityBox.Center.E[AxisIndex];
+                        f32 EntityMin = EntityCenter - EntityBox.Extents.E[AxisIndex];
+                        f32 EntityMax = EntityCenter + EntityBox.Extents.E[AxisIndex];
+
+                        f32 TestEntityCenter = TestEntity->WorldPosition.P.E[AxisIndex] + TestAABB->Center.E[AxisIndex];
+                        f32 TestEntityMin = TestEntityCenter - TestAABB->Extents.E[AxisIndex];
+                        f32 TestEntityMax = TestEntityCenter + TestAABB->Extents.E[AxisIndex];
+
+                        f32 PositiveAxisPenetrationDepth = TestEntityMax - EntityMin;
+                        f32 NegativeAxisPenetrationDepth = EntityMax - TestEntityMin;
+
+                        b32 NegativeAxisIsShortest = (NegativeAxisPenetrationDepth < PositiveAxisPenetrationDepth);
+                        f32 AxisPenetrationDepth = (NegativeAxisIsShortest ?
+                                                    NegativeAxisPenetrationDepth : PositiveAxisPenetrationDepth);
+
+                        if (AxisPenetrationDepth < 0.0f)
+                        {
+                            SeparatingAxisFound = true;
+                            break;
+                        }
+
+                        if (AxisPenetrationDepth < ThisPenetrationDepth)
+                        {
+                            ThisPenetrationDepth = AxisPenetrationDepth;
+                            ThisCollisionNormal = Vec3();
+                            ThisCollisionNormal.E[AxisIndex] = NegativeAxisIsShortest ? -1.0f : 1.0f;
+                        }
+                    }
+
+                    if (!SeparatingAxisFound &&
+                        VecDot(ThisCollisionNormal, EntityTranslation) < -FLT_EPSILON &&
+                        (ThisPenetrationDepth < ClosestContact.Depth))
+                    {
+                        ClosestContact.Depth = ThisPenetrationDepth;
+                        ClosestContact.Normal = ThisCollisionNormal;
+                        ClosestContact.Entity = TestEntity;
+                    }
+
+                    // DD_DrawQuickAABox(TestEntity->WorldPosition.P + TestAABB->Center, TestAABB->Extents,
+                    //                   (SeparatingAxisFound ? Vec3(0,1,0) : Vec3(1,0,0)));
+                } break;
+
+                default:
+                {
+                    InvalidCodePath;
+                } break;
+            }
+        }
+    }
+
+    return ClosestContact;
 }

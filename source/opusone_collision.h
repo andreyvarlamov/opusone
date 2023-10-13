@@ -82,6 +82,23 @@ union collision_geometry
     polyhedron_set PolyhedronSet;
 };
 
+struct collision_contact
+{
+    f32 Depth;
+    vec3 Normal;
+    entity *Entity;
+};
+
+inline collision_contact
+CollisionContact()
+{
+    collision_contact Result = {};
+
+    Result.Depth = FLT_MAX;
+
+    return Result;
+}
+
 void
 ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
                               vec3 *ImportedVertices, u32 VertexCount, i32 *ImportedIndices, u32 IndexCount,
@@ -107,5 +124,9 @@ IntersectRayAABB(vec3 P, vec3 D, vec3 BoxCenter, vec3 BoxExtents, f32 *Out_TMin,
 
 b32
 IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, f32 *Out_W, f32 *Out_T);
+
+struct game_state;
+collision_contact
+CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation);
 
 #endif

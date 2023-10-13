@@ -39,45 +39,44 @@ TODO:
 
 
 - Scratch:
-    - Step over small obstacles
-    - Limits to sliding/climbing angles
-    - How to determine if the player is on the ground
-    - Some kind of separation between checking control inputs and applying them
-    - Intrinsics for math functions
-    - SIMD
-    - Optimized linmath functions: RotateVectorByQuat; FullTransform stuff
-    - Debug toggles: collisions and gravity
+    - Ground search. How to determine if the player is on the ground
     - Casting a ray against polyhedron
-    - Clean up game logic update
-    - Investigate weird stuttering when rotating camera.
-    - Animation controller
-    - Post-processing
-    - Import materials as part of the importing code.
+    - Camera dolly-sliding if not enough room
+    - OBB vs OBB collisions. OBB for characters and monsters.
+    - Step over small obstacles
+    - More proper jump. Tweak params.
+    - Clean up collision geometry structs and lack thereof. Pull collision logic into a different function 
+    - Limits to sliding/climbing angles
+    - Debug draw header
     - Render unit cleanup
         - All render units in a linked list
         - Fix render marker types being individual tagged unions, they should be per render unit
         - Fixed sized render units.
         - Reference using pointers, not indices (materials, render units, instances, blueprints)
-    - OBB vs OBB collisions. OBB for characters and monsters.
-    - Clean up collision geometry structs and lack thereof. Pull collision logic into a different function
-    - Refactor blueprints and instances. Entities.
-    - Collision info from DCC, through GLTF and Assimp. Analytical collision geometry and collision meshes
-    - DLL Hot-reloading
-    - Debug draw header
+    - Collision polyhedron imported in one model from DCC
+    - A more complex interior scene with more complicated geometry, separate collision geometry. More realistic level collision cases.
+    - Basic follower AI
+    - First pass on an "animation controller"
+    - Combat. Simple attack and damage box vs box.
+    - Skeletal hitboxes. And more complex sword collisions.
+    - Basic combat AI
+    - Player vs enemy combat scene.
+    - Exterior scene.
     - Concept of a scene. Different types of lights. Multiple lights.
+
+    - Render unit <-> entity relation cleanup -- hashtable?
+    - Intrinsics for math functions
+    - SIMD
     - Mouse picking using the depth buffer and a framebuffer saving which model is displayed in that fragment
+    - Optimized linmath functions: RotateVectorByQuat; FullTransform stuff
+    - Investigate weird stuttering when rotating camera (I think it's only with keyboard).
+    - Post-processing
+    - Import materials as part of the importing code.
+    - Collision info from DCC, through GLTF and Assimp. Analytical collision geometry.
+    - DLL Hot-reloading
     - Draw text in the world space (e.g. instance ids above instances)
     - I don't think I need normals or alpha in debug draw vertex spec
     - When to do mipmapping, when not to do mipmapping. Is that the right way to handle more distant objects? S and T axes
-    - Sort out the camera stuff after I go through the first pass over collisions
-        - Separate look direction, independent of orientation, on every entity?
-          ControlledEntity. Camera points to any entity, whether controlled or not. Camera matches the look direction of the entity.
-          That way can have a non-controlled entity followed by a camera, and the ControlledEntity not followed by a camera.
-        - Should camera be its own entity? How to detach camera, e.g. for level editing?
-        - Is it possible to collapse the whole crazy structure with calculating a view matrix differently.
-          It seems like I should be able to change the order of operations between translation and rotation, to have a target-camera.
-        - Change camera inner structures to collapse complexity. Use quaternion?
-        - Camera sliding if not enough room
     - Handle a skinned model in a rest pose better
     - More efficient normal transform matrix calculation (calculate for each bone in software and send in uniform).
     - Normal mapping is not implemented in the shader.

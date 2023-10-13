@@ -64,6 +64,7 @@ struct game_state
     
     f32 PlayerEyeHeight;
     vec3 PlayerVelocity;
+    vec3 PlayerGravityVelocity;
     b32 PlayerAirborne;
     f32 PlayerSpecJumpVelocity;
     f32 PlayerSpecAccelerationValue;
