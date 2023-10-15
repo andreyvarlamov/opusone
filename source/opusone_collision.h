@@ -84,6 +84,8 @@ union collision_geometry
 
 struct collision_contact
 {
+    b32 IsPresent;
+    
     f32 Depth;
     vec3 Normal;
     entity *Entity;
@@ -126,7 +128,8 @@ b32
 IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, f32 *Out_W, f32 *Out_T);
 
 struct game_state;
-collision_contact
-CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation);
+void
+CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation,
+                         collision_contact *Out_ClosestContact, collision_contact *Out_GroundContact);
 
 #endif

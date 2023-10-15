@@ -63,9 +63,11 @@ struct game_state
     entity *PlayerEntity;
     
     f32 PlayerEyeHeight;
-    vec3 PlayerVelocity;
-    vec3 PlayerGravityVelocity;
+    vec3 PlayerVelocityXZ;
+    f32 PlayerVelocityY;
     b32 PlayerAirborne;
+    b32 PlayerOnGround;
+    mat3 GroundSpaceTransform;
     f32 PlayerSpecJumpVelocity;
     f32 PlayerSpecAccelerationValue;
     f32 PlayerSpecGravityValue;

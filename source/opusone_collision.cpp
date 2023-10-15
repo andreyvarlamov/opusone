@@ -967,8 +967,18 @@ IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, 
     return true;
 }
 
-collision_contact
-CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation)
+internal b32
+IsVectorVertical(vec3 Vector, f32 VerticalAngleThresholdDegrees = 30.0f)
+{
+    f32 VerticalSine = VecDot(Vector, Vec3(0,1,0));
+    f32 VerticalCollisionAngleThreshold = ToRadiansF(VerticalAngleThresholdDegrees);
+    b32 Result = (VerticalSine > SinF(VerticalCollisionAngleThreshold));
+    return Result;
+}
+
+void
+CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation,
+                         collision_contact *Out_ClosestContact, collision_contact *Out_GroundContact)
 {
     entity_type_spec *Spec = GameState->EntityTypeSpecs + Entity->Type;
     Assert(Spec->CollisionType == COLLISION_TYPE_AABB);
@@ -982,6 +992,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
     EntityBox.Axes[2] = Vec3(0,0,1);
 
     collision_contact ClosestContact = CollisionContact();
+    collision_contact GroundContact = CollisionContact();
     
     for (u32 EntityIndex = 0;
          EntityIndex < GameState->EntityCount;
@@ -1017,38 +1028,41 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
                         b32 AreSeparated =
                             AreSeparatedBoxPolyhedron(Polyhedron, &EntityBox, &ThisCollisionNormal, &ThisPenetrationDepth);
 
-                        if (!AreSeparated &&
-                            VecDot(ThisCollisionNormal, EntityTranslation) < -FLT_EPSILON &&
-                            (ThisPenetrationDepth < ClosestContact.Depth))
+                        if (!AreSeparated)
                         {
-                            ClosestContact.Depth = ThisPenetrationDepth;
-                            ClosestContact.Normal = ThisCollisionNormal;
-                            ClosestContact.Entity = TestEntity;
-
-                            edge *EdgeCursor = Polyhedron->Edges;
-                            for (u32 TestPolyhedronEdgeIndex = 0;
-                                 TestPolyhedronEdgeIndex < Polyhedron->EdgeCount;
-                                 ++TestPolyhedronEdgeIndex, ++EdgeCursor)
+                            collision_contact *Contact = IsVectorVertical(ThisCollisionNormal) ? &GroundContact : &ClosestContact;
+                            if (ThisPenetrationDepth < Contact->Depth)
                             {
-                                DD_DrawQuickVector(Polyhedron->Vertices[EdgeCursor->AIndex],
-                                                   Polyhedron->Vertices[EdgeCursor->BIndex],
-                                                   Vec3(1,0,1));
-                            }
-                
-                            polygon *FaceCursor = Polyhedron->Faces;
-                            for (u32 FaceIndex = 0;
-                                 FaceIndex < Polyhedron->FaceCount;
-                                 ++FaceIndex, ++FaceCursor)
-                            {
-                                vec3 FaceCentroid = Vec3();
-                                for (u32 VertexIndex = 0;
-                                     VertexIndex < FaceCursor->VertexCount;
-                                     ++VertexIndex)
+                                Contact->IsPresent = true;
+                                Contact->Depth = ThisPenetrationDepth;
+                                Contact->Normal = ThisCollisionNormal;
+                                Contact->Entity = TestEntity;
+                                
+                                edge *EdgeCursor = Polyhedron->Edges;
+                                for (u32 TestPolyhedronEdgeIndex = 0;
+                                     TestPolyhedronEdgeIndex < Polyhedron->EdgeCount;
+                                     ++TestPolyhedronEdgeIndex, ++EdgeCursor)
                                 {
-                                    FaceCentroid += Polyhedron->Vertices[FaceCursor->VertexIndices[VertexIndex]];
+                                    DD_DrawQuickVector(Polyhedron->Vertices[EdgeCursor->AIndex],
+                                                       Polyhedron->Vertices[EdgeCursor->BIndex],
+                                                       Vec3(1,0,1));
                                 }
-                                FaceCentroid /= (f32) FaceCursor->VertexCount;
-                                DD_DrawQuickVector(FaceCentroid, FaceCentroid + 0.25f*FaceCursor->Plane.Normal, Vec3(1,1,1));
+                
+                                polygon *FaceCursor = Polyhedron->Faces;
+                                for (u32 FaceIndex = 0;
+                                     FaceIndex < Polyhedron->FaceCount;
+                                     ++FaceIndex, ++FaceCursor)
+                                {
+                                    vec3 FaceCentroid = Vec3();
+                                    for (u32 VertexIndex = 0;
+                                         VertexIndex < FaceCursor->VertexCount;
+                                         ++VertexIndex)
+                                    {
+                                        FaceCentroid += Polyhedron->Vertices[FaceCursor->VertexIndices[VertexIndex]];
+                                    }
+                                    FaceCentroid /= (f32) FaceCursor->VertexCount;
+                                    DD_DrawQuickVector(FaceCentroid, FaceCentroid + 0.25f*FaceCursor->Plane.Normal, Vec3(1,1,1));
+                                }
                             }
                         }
                     }
@@ -1096,13 +1110,16 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
                         }
                     }
 
-                    if (!SeparatingAxisFound &&
-                        VecDot(ThisCollisionNormal, EntityTranslation) < -FLT_EPSILON &&
-                        (ThisPenetrationDepth < ClosestContact.Depth))
+                    if (!SeparatingAxisFound)
                     {
-                        ClosestContact.Depth = ThisPenetrationDepth;
-                        ClosestContact.Normal = ThisCollisionNormal;
-                        ClosestContact.Entity = TestEntity;
+                        collision_contact *Contact = IsVectorVertical(ThisCollisionNormal) ? &GroundContact : &ClosestContact;
+                        if (ThisPenetrationDepth < Contact->Depth)
+                        {
+                            Contact->IsPresent = true;
+                            Contact->Depth = ThisPenetrationDepth;
+                            Contact->Normal = ThisCollisionNormal;
+                            Contact->Entity = TestEntity;
+                        }
                     }
 
                     // DD_DrawQuickAABox(TestEntity->WorldPosition.P + TestAABB->Center, TestAABB->Extents,
@@ -1117,5 +1134,6 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
         }
     }
 
-    return ClosestContact;
+    if (Out_ClosestContact) *Out_ClosestContact = ClosestContact;
+    if (Out_GroundContact) *Out_GroundContact = GroundContact;
 }
