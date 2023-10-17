@@ -978,8 +978,12 @@ IsVectorVertical(vec3 Vector, f32 VerticalAngleThresholdDegrees = 30.0f)
 
 void
 CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation,
-                         collision_contact *Out_ClosestContact, collision_contact *Out_GroundContact)
+                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts, collision_contact *Out_GroundContact)
 {
+    Assert(Out_ClosestContacts);
+    Assert(Out_GroundContact);
+    Assert(MaxClosestContactCount > 0);
+    
     entity_type_spec *Spec = GameState->EntityTypeSpecs + Entity->Type;
     Assert(Spec->CollisionType == COLLISION_TYPE_AABB);
     Assert(Spec->CollisionGeometry);
@@ -991,8 +995,8 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
     EntityBox.Axes[1] = Vec3(0,1,0);
     EntityBox.Axes[2] = Vec3(0,0,1);
 
-    collision_contact ClosestContact = CollisionContact();
-    collision_contact GroundContact = CollisionContact();
+    InitializeContactArray(Out_ClosestContacts, MaxClosestContactCount);
+    *Out_GroundContact = CollisionContact();
     
     for (u32 EntityIndex = 0;
          EntityIndex < GameState->EntityCount;
@@ -1030,14 +1034,19 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
 
                         if (!AreSeparated)
                         {
-                            collision_contact *Contact = IsVectorVertical(ThisCollisionNormal) ? &GroundContact : &ClosestContact;
-                            if (ThisPenetrationDepth < Contact->Depth)
+                            b32 ContactAdded = false;
+                            
+                            if (IsVectorVertical(ThisCollisionNormal))
                             {
-                                Contact->IsPresent = true;
-                                Contact->Depth = ThisPenetrationDepth;
-                                Contact->Normal = ThisCollisionNormal;
-                                Contact->Entity = TestEntity;
-                                
+                                ContactAdded = PopulateContact(Out_GroundContact, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
+                            }
+                            else
+                            {
+                                ContactAdded = PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
+                            }
+
+                            if (ContactAdded)
+                            {
                                 edge *EdgeCursor = Polyhedron->Edges;
                                 for (u32 TestPolyhedronEdgeIndex = 0;
                                      TestPolyhedronEdgeIndex < Polyhedron->EdgeCount;
@@ -1112,13 +1121,13 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
 
                     if (!SeparatingAxisFound)
                     {
-                        collision_contact *Contact = IsVectorVertical(ThisCollisionNormal) ? &GroundContact : &ClosestContact;
-                        if (ThisPenetrationDepth < Contact->Depth)
+                        if (IsVectorVertical(ThisCollisionNormal))
                         {
-                            Contact->IsPresent = true;
-                            Contact->Depth = ThisPenetrationDepth;
-                            Contact->Normal = ThisCollisionNormal;
-                            Contact->Entity = TestEntity;
+                            PopulateContact(Out_GroundContact, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
+                        }
+                        else
+                        {
+                            PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
                         }
                     }
 
@@ -1133,7 +1142,4 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
             }
         }
     }
-
-    if (Out_ClosestContact) *Out_ClosestContact = ClosestContact;
-    if (Out_GroundContact) *Out_GroundContact = GroundContact;
 }

@@ -5,6 +5,7 @@
 #include "opusone_linmath.h"
 
 #define COLLISION_ITERATIONS 3
+#define COLLISION_CONTACTS_PER_ITERATION 4
 
 enum collision_type
 {
@@ -84,10 +85,8 @@ union collision_geometry
 
 struct collision_contact
 {
-    b32 IsPresent;
-    
-    f32 Depth;
     vec3 Normal;
+    f32 Depth;
     entity *Entity;
 };
 
@@ -99,6 +98,59 @@ CollisionContact()
     Result.Depth = FLT_MAX;
 
     return Result;
+}
+
+inline void
+InitializeContactArray(collision_contact *Contacts, u32 ContactCount)
+{
+    for (u32 ContactIndex = 0;
+         ContactIndex < ContactCount;
+         ++ContactIndex, ++Contacts)
+    {
+        *Contacts = CollisionContact();
+    }
+}
+
+inline b32
+PopulateContact(collision_contact *Contact, vec3 Normal, f32 Depth, entity *Entity)
+{
+    Assert(Contact);
+    
+    if (Depth < Contact->Depth)
+    {
+        Contact->Normal = Normal;
+        Contact->Depth = Depth;
+        Contact->Entity = Entity;
+        return true;
+    }
+
+    return false;
+}
+
+inline b32
+PopulateContactArray(collision_contact *Contacts, u32 ContactCount, vec3 Normal, f32 Depth, entity *Entity)
+{
+    b32 ContactAdded = PopulateContact(Contacts + ContactCount-1, Normal, Depth, Entity);
+    b32 NeedAnotherSortingIteration = ContactAdded;
+
+    while (NeedAnotherSortingIteration)
+    {
+        NeedAnotherSortingIteration = false;
+        for (i32 ContactIndex = (i32) ContactCount - 1;
+             ContactIndex > 0;
+             --ContactIndex)
+        {
+            if (Contacts[ContactIndex].Depth < Contacts[ContactIndex-1].Depth)
+            {
+                collision_contact TempContact = Contacts[ContactIndex];
+                Contacts[ContactIndex] = Contacts[ContactIndex-1];
+                Contacts[ContactIndex-1] = TempContact;
+                NeedAnotherSortingIteration = true;
+            }
+        }
+    }
+
+    return ContactAdded;
 }
 
 void
@@ -130,6 +182,6 @@ IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, 
 struct game_state;
 void
 CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation,
-                         collision_contact *Out_ClosestContact, collision_contact *Out_GroundContact);
+                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts, collision_contact *Out_GroundContact);
 
 #endif

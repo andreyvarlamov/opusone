@@ -609,25 +609,46 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             Breakpoint;
         }
 
-        collision_contact ClosestContact;
+        // NOTE: Get closest contacts and ground contact for the moving entity
+        collision_contact ClosestContacts[COLLISION_CONTACTS_PER_ITERATION] = {};
         collision_contact GroundContact;
         vec3 PlayerTranslation = PlayerTranslationXZ + Vec3(0,PlayerTranslationY,0);
-        CheckCollisionsForEntity(GameState, Player, PlayerTranslation, &ClosestContact, &GroundContact);
+        CheckCollisionsForEntity(GameState, Player, PlayerTranslation,
+                                 ArrayCount(ClosestContacts), ClosestContacts, &GroundContact);
 
-        GameState->PlayerOnGround = GroundContact.IsPresent;
-        if (GameState->PlayerOnGround)
+        // NOTE: If on ground with the speculative translation, update the ground space transform
+        GameState->PlayerOnGround = (GroundContact.Entity != 0);
+        if (GameState->PlayerOnGround && !IsZeroVector(GroundContact.Normal - Vec3(0,1,0)))
         {
             vec3 Normal = GroundContact.Normal;
             vec3 Tangent = VecNormalize(VecCross(Vec3(0,0,1), Normal));
             vec3 Bitangent = VecCross(Normal, Tangent);
+            // TODO: This should be reverted back if we didn't end up moving successfully after all the iterations
             GameState->GroundSpaceTransform = Mat3(-Tangent, Normal, Bitangent);
         }
-        if (!GameState->PlayerOnGround || IsZeroVector(ClosestContact.Normal - Vec3(0,1,0)))
+        else
         {
             GameState->GroundSpaceTransform = Mat3(1);
         }
 
-        if (!ClosestContact.IsPresent)
+        // NOTE: Find the closest valid contact (has to be against the direction of the translation in the ground space)
+        collision_contact ClosestContact = CollisionContact();
+        for (u32 ContactIndex = 0;
+             ContactIndex < ArrayCount(ClosestContacts);
+             ++ContactIndex)
+        {
+            collision_contact *Contact = ClosestContacts + ContactIndex;
+            if (Contact->Entity &&
+                VecDot(Contact->Normal, GameState->PlayerOnGround ? PlayerTranslationXZ : PlayerTranslation) < -FLT_EPSILON)
+            {
+                ClosestContact.Normal = Contact->Normal;
+                ClosestContact.Depth = Contact->Depth;
+                ClosestContact.Entity = Contact->Entity;
+            }
+        }
+
+        // NOTE: if no valid closest contact, safe to move; if there is a valid contact, try to resolve it and continue with the next iteration
+        if (!ClosestContact.Entity)
         {
             TranslationIsSafe = true;
             if (IterationIndex > 0)
@@ -646,7 +667,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             }
 
             vec3 CollidingNormal = ClosestContact.Normal;
-            if (GroundContact.IsPresent)
+            if (GroundContact.Entity)
             {
                 CollidingNormal -= VecDot(GroundContact.Normal, CollidingNormal) * GroundContact.Normal;
                 CollidingNormal = VecNormalize(CollidingNormal);
