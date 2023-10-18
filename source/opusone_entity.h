@@ -17,6 +17,7 @@ enum entity_type
     EntityType_Thing,
     EntityType_Container,
     EntityType_Snowman,
+    EntityType_ObstacleCourse,
     EntityType_Count
 };
 

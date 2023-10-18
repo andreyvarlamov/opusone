@@ -179,6 +179,31 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     }
                 } break;
 
+                case EntityType_ObstacleCourse:
+                {
+                    Spec->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, "resources/models/collisions/Collisions.gltf");
+
+                    {
+                        Spec->CollisionType = COLLISION_TYPE_POLYHEDRON_SET;
+                        Spec->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
+                        polyhedron_set *PolyhedronSet = &Spec->CollisionGeometry->PolyhedronSet;
+                        PolyhedronSet->PolyhedronCount = Spec->ImportedModel->MeshCount;
+                        PolyhedronSet->Polyhedra = MemoryArena_PushArray(&GameState->WorldArena, PolyhedronSet->PolyhedronCount, polyhedron);
+                    
+                        imported_mesh *ImportedMeshCursor = Spec->ImportedModel->Meshes;
+                        polyhedron *PolyhedronCursor = PolyhedronSet->Polyhedra;
+                        for (u32 MeshIndex = 0;
+                             MeshIndex < Spec->ImportedModel->MeshCount;
+                             ++MeshIndex, ++ImportedMeshCursor, ++PolyhedronCursor)
+                        {
+                            ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
+                                                          ImportedMeshCursor->VertexPositions, ImportedMeshCursor->VertexCount,
+                                                          ImportedMeshCursor->Indices, ImportedMeshCursor->IndexCount,
+                                                          PolyhedronCursor);
+                        }
+                    }
+                } break;
+
                 default:
                 {
                     InvalidCodePath;
@@ -422,8 +447,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         AddEntity(GameState, EntityType_Container, Vec3(3,0,-3), Quat(Vec3(1,1,0), ToRadiansF(60)), Vec3(1));
         AddEntity(GameState, EntityType_Snowman, Vec3(5,0,5), Quat(), Vec3(3));
         // GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(0,2,5), Quat(), Vec3(1));
-        GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(-10.9f,-13,0.11f), Quat(), Vec3(1));
+        // GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(-10.9f,-13,0.11f), Quat(), Vec3(1));
+        GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(0,0,100), Quat(), Vec3(1));
         AddEntity(GameState, EntityType_BoxRoom, Vec3(-40,-30,0), Quat(Vec3(0,0,1), ToRadiansF(30)), Vec3(5,1,1));
+        AddEntity(GameState, EntityType_ObstacleCourse, Vec3(0,0,100), Quat(), Vec3(1));
 
         // NOTE: Misc data that probably should be set somewhere else
         GameState->PlayerEyeHeight = 1.7f;
@@ -548,11 +575,16 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     {
         // NOTE: Gravity
         PlayerAcceleration.Y = GameState->PlayerSpecGravityValue;
+        
         if (RequestedControls->PlayerJump && GameState->PlayerOnGround)
         {
+            GameState->PlayerOnGround = false;
             GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
         }
-        PlayerAcceleration = GameState->GroundSpaceTransform * PlayerAcceleration;
+        else
+        {
+            GameState->PlayerOnGround = true;
+        }
     }
 
     // NOTE: Integration for player movement
@@ -560,7 +592,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     
     vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
                               GameState->PlayerVelocity * GameInput->DeltaTime);
-
 
     GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
 
@@ -599,23 +630,16 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         CheckCollisionsForEntity(GameState, Player, PlayerTranslation,
                                  ArrayCount(ClosestContacts), ClosestContacts, &GroundContact);
 
-            
         // NOTE: Find the closest valid contact (has to be against the direction of the translation in the ground space)
         collision_contact ClosestContact = CollisionContact();
         {
-            vec3 AdjustedTranslation = PlayerTranslation;
-            if (GroundContact.Entity)
-            {
-                AdjustedTranslation += AbsF(VecDot(GroundContact.Normal, AdjustedTranslation)) * GroundContact.Normal;
-            }
-            
             for (u32 ContactIndex = 0;
                  ContactIndex < ArrayCount(ClosestContacts);
                  ++ContactIndex)
             {
                 collision_contact *Contact = ClosestContacts + ContactIndex;
                 if (Contact->Entity &&
-                    VecDot(Contact->Normal, AdjustedTranslation) < -FLT_EPSILON)
+                    VecDot(Contact->Normal, PlayerTranslation) < -FLT_EPSILON)
                 {
                     ClosestContact.Normal = Contact->Normal;
                     ClosestContact.Depth = Contact->Depth;
@@ -625,34 +649,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
 
         // NOTE: if no valid closest contact, safe to move; if there is a valid contact, try to resolve it and continue with the next iteration
-        if (!ClosestContact.Entity)
+        if (!ClosestContact.Entity && !GroundContact.Entity)
         {
             TranslationIsSafe = true;
-            
-            GameState->PlayerOnGround = (GroundContact.Entity != 0);
-            if (GameState->PlayerOnGround)
-            {
-                // NOTE: Adjust translation and velocity to not collide with the ground
-                PlayerTranslation += AbsF(VecDot(GroundContact.Normal, PlayerTranslation)) * GroundContact.Normal;
-                GameState->PlayerVelocity += AbsF(VecDot(GroundContact.Normal, GameState->PlayerVelocity)) * GroundContact.Normal;
-                
-                // NOTE: Update entity ground state for the next frame
-                if (!IsZeroVector(GroundContact.Normal - Vec3(0,1,0)))
-                {
-                    vec3 Normal = GroundContact.Normal;
-                    vec3 Tangent = VecNormalize(VecCross(Normal, Vec3(0,0,1)));
-                    vec3 Bitangent = VecCross(Tangent, Normal);
-                    GameState->GroundSpaceTransform = Mat3(Tangent, Normal, Bitangent);
-                }
-                else
-                {
-                    GameState->GroundSpaceTransform = Mat3(1);
-                }
-            }
-            else
-            {
-                GameState->GroundSpaceTransform = Mat3(1);
-            }
 
             break;
         }
@@ -666,14 +665,15 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             }
 
             vec3 CollidingNormal = ClosestContact.Normal;
-            if (GroundContact.Entity)
-            {
-                CollidingNormal -= VecDot(GroundContact.Normal, CollidingNormal) * GroundContact.Normal;
-                CollidingNormal = VecNormalize(CollidingNormal);
-            }
 
             PlayerTranslation += AbsF(VecDot(CollidingNormal, PlayerTranslation)) * CollidingNormal;
             GameState->PlayerVelocity += AbsF(VecDot(CollidingNormal, GameState->PlayerVelocity)) * CollidingNormal;
+
+            if (GroundContact.Entity)
+            {
+                PlayerTranslation += AbsF(VecDot(GroundContact.Normal, PlayerTranslation)) * GroundContact.Normal;
+                GameState->PlayerVelocity += AbsF(VecDot(GroundContact.Normal, GameState->PlayerVelocity)) * GroundContact.Normal;
+            }
 
             DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + CollidingNormal,
                                Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));

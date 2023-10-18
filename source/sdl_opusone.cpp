@@ -58,7 +58,7 @@ main(int Argc, char *Argv[])
     glViewport(0, 0, GameInput->ScreenWidth, GameInput->ScreenHeight);
     printf("PLATFORM: Original Screen Resolution: %d x %d\n", GameInput->OriginalScreenWidth, GameInput->OriginalScreenHeight);
 
-    f32 ExpectedRefreshRates[] = { 164.386f, 60.0f, 30.0f }; // Hardcode from my display settings for now
+    f32 ExpectedRefreshRates[] = { 60.0f, 164.386f, 30.0f }; // Hardcode from my display settings for now
     u32 ExpectedRefreshRateCount = ArrayCount(ExpectedRefreshRates);
     
     u32 CurrentExpectedRefreshRate = 0;

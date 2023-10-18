@@ -997,6 +997,8 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
 
     InitializeContactArray(Out_ClosestContacts, MaxClosestContactCount);
     *Out_GroundContact = CollisionContact();
+
+    b32 NoGround = true;
     
     for (u32 EntityIndex = 0;
          EntityIndex < GameState->EntityCount;
@@ -1036,7 +1038,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
                         {
                             b32 ContactAdded = false;
                             
-                            if (IsVectorVertical(ThisCollisionNormal))
+                            if (IsVectorVertical(ThisCollisionNormal) && !NoGround)
                             {
                                 ContactAdded = PopulateContact(Out_GroundContact, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
                             }
@@ -1121,7 +1123,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
 
                     if (!SeparatingAxisFound)
                     {
-                        if (IsVectorVertical(ThisCollisionNormal))
+                        if (IsVectorVertical(ThisCollisionNormal) && !NoGround)
                         {
                             PopulateContact(Out_GroundContact, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
                         }
