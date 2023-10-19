@@ -967,21 +967,11 @@ IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, 
     return true;
 }
 
-internal b32
-IsVectorVertical(vec3 Vector, f32 VerticalAngleThresholdDegrees = 30.0f)
-{
-    f32 VerticalSine = VecDot(Vector, Vec3(0,1,0));
-    f32 VerticalCollisionAngleThreshold = ToRadiansF(VerticalAngleThresholdDegrees);
-    b32 Result = (VerticalSine > SinF(VerticalCollisionAngleThreshold));
-    return Result;
-}
-
 void
 CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation,
-                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts, collision_contact *Out_GroundContact)
+                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts)
 {
     Assert(Out_ClosestContacts);
-    Assert(Out_GroundContact);
     Assert(MaxClosestContactCount > 0);
     
     entity_type_spec *Spec = GameState->EntityTypeSpecs + Entity->Type;
@@ -996,10 +986,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
     EntityBox.Axes[2] = Vec3(0,0,1);
 
     InitializeContactArray(Out_ClosestContacts, MaxClosestContactCount);
-    *Out_GroundContact = CollisionContact();
 
-    b32 NoGround = true;
-    
     for (u32 EntityIndex = 0;
          EntityIndex < GameState->EntityCount;
          ++EntityIndex)
@@ -1036,17 +1023,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
 
                         if (!AreSeparated)
                         {
-                            b32 ContactAdded = false;
-                            
-                            if (IsVectorVertical(ThisCollisionNormal) && !NoGround)
-                            {
-                                ContactAdded = PopulateContact(Out_GroundContact, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
-                            }
-                            else
-                            {
-                                ContactAdded = PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
-                            }
-
+                            b32 ContactAdded = PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
                             if (ContactAdded)
                             {
                                 edge *EdgeCursor = Polyhedron->Edges;
@@ -1123,14 +1100,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
 
                     if (!SeparatingAxisFound)
                     {
-                        if (IsVectorVertical(ThisCollisionNormal) && !NoGround)
-                        {
-                            PopulateContact(Out_GroundContact, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
-                        }
-                        else
-                        {
-                            PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
-                        }
+                        PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
                     }
 
                     // DD_DrawQuickAABox(TestEntity->WorldPosition.P + TestAABB->Center, TestAABB->Extents,

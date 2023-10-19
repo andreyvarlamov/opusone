@@ -65,6 +65,7 @@ struct game_state
     f32 PlayerEyeHeight;
     vec3 PlayerVelocity;
     b32 PlayerOnGround;
+    vec3 GroundNormal;
     /* mat3 GroundSpaceTransform; */
     f32 PlayerSpecJumpVelocity;
     f32 PlayerSpecAccelerationValue;

@@ -153,6 +153,15 @@ PopulateContactArray(collision_contact *Contacts, u32 ContactCount, vec3 Normal,
     return ContactAdded;
 }
 
+inline b32
+IsGroundContact(collision_contact *Contact, f32 VerticalAngleThresholdDegrees = 30.0f)
+{
+    f32 VerticalSine = VecDot(Contact->Normal, Vec3(0,1,0));
+    f32 VerticalCollisionAngleThreshold = ToRadiansF(VerticalAngleThresholdDegrees);
+    b32 Result = (VerticalSine > SinF(VerticalCollisionAngleThreshold));
+    return Result;
+}
+
 void
 ComputePolyhedronFromVertices(memory_arena *Arena, memory_arena *TransientArena,
                               vec3 *ImportedVertices, u32 VertexCount, i32 *ImportedIndices, u32 IndexCount,
@@ -182,6 +191,6 @@ IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, 
 struct game_state;
 void
 CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation,
-                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts, collision_contact *Out_GroundContact);
+                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts);
 
 #endif

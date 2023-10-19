@@ -456,8 +456,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->PlayerEyeHeight = 1.7f;
         GameState->PlayerSpecJumpVelocity = 100.0f;
         GameState->PlayerSpecAccelerationValue = 300.0f;
-        GameState->PlayerSpecGravityValue = -500.0f;
+        GameState->PlayerSpecGravityValue = -2.0f;
         GameState->PlayerSpecDragValue = 50.0f;
+        GameState->GroundNormal = Vec3(0,1,0);
     }
 
     //
@@ -557,35 +558,56 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     }
 
     vec3 PlayerAcceleration = {};
-    if (RequestedControls->PlayerForward) PlayerAcceleration.Z += 1.0f;
-    if (RequestedControls->PlayerBackward) PlayerAcceleration.Z -= 1.0f;
-    if (RequestedControls->PlayerLeft) PlayerAcceleration.X += 1.0f;
-    if (RequestedControls->PlayerRight) PlayerAcceleration.X -= 1.0f;
+    if (RequestedControls->PlayerForward) PlayerAcceleration.Z -= 1.0f;
+    if (RequestedControls->PlayerBackward) PlayerAcceleration.Z += 1.0f;
+    if (RequestedControls->PlayerLeft) PlayerAcceleration.X -= 1.0f;
+    if (RequestedControls->PlayerRight) PlayerAcceleration.X += 1.0f;
     if (GameState->GravityDisabledTemp)
     {
         if (RequestedControls->PlayerDown) PlayerAcceleration.Y -= 1.0f;
         if (RequestedControls->PlayerUp) PlayerAcceleration.Y += 1.0f;
     }
-    if (!IsZeroVector(PlayerAcceleration))
-    {
-        PlayerAcceleration = GameState->PlayerSpecAccelerationValue * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), Player->WorldPosition.R);
-    }
+    // if (!IsZeroVector(PlayerAcceleration))
+    // {
+    //     PlayerAcceleration = GameState->PlayerSpecAccelerationValue * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), Player->WorldPosition.R);
+    // }
 
     if (!GameState->GravityDisabledTemp)
     {
         // NOTE: Gravity
         PlayerAcceleration.Y = GameState->PlayerSpecGravityValue;
         
-        if (RequestedControls->PlayerJump && GameState->PlayerOnGround)
-        {
-            GameState->PlayerOnGround = false;
-            GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
-        }
-        else
-        {
-            GameState->PlayerOnGround = true;
-        }
+        // if (RequestedControls->PlayerJump && GameState->PlayerOnGround)
+        // {
+        //     GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
+        // }
     }
+
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_B))
+    {
+        Breakpoint;
+    }
+        
+    {
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + VecNormalize(GameState->GroundNormal), Vec3(0,1,0));
+        vec3 PlayerRight = RotateVecByQuatSlow(Vec3(-1,0,0), Player->WorldPosition.R);
+        vec3 GroundForward = VecNormalize(VecCross(GameState->GroundNormal, PlayerRight));
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + GroundForward, Vec3(0,0,1));
+        vec3 GroundRight = VecCross(GroundForward, GameState->GroundNormal);
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + GroundRight, Vec3(1,0,0));
+        // mat3 GroundTransform = Mat3(GroundRight, GameState->GroundNormal, GroundForward);
+
+        vec3 ForwardComponent = PlayerAcceleration.Z * GroundForward;
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + ForwardComponent, Vec3(0,0,1));
+        vec3 RightComponent = PlayerAcceleration.X * GroundRight;
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + RightComponent, Vec3(1,0,0));
+        vec3 UpComponent = PlayerAcceleration.Y * GameState->GroundNormal;
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + UpComponent, Vec3(0,1,0));
+        
+        PlayerAcceleration = -ForwardComponent + RightComponent + UpComponent;
+    }
+
+    PlayerAcceleration *= GameState->PlayerSpecAccelerationValue;
 
     // NOTE: Integration for player movement
     PlayerAcceleration -= GameState->PlayerSpecDragValue * GameState->PlayerVelocity; // NOTE: Drag
@@ -606,6 +628,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     // NOTE: Process entity movement
     u32 CollisionIterations = COLLISION_ITERATIONS + 1; // NOTE: Last iteration is only to check if can move after prev iteration
     b32 TranslationIsSafe = false;
+    b32 FoundNewGround = false;
+    vec3 NewGroundNormal = Vec3(0,1,0);
 
     u32 IterationIndex;
     for (IterationIndex = 0;
@@ -619,16 +643,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             break;
         }
 
-        if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_B) && IterationIndex == 0)
-        {
-            Breakpoint;
-        }
+        // if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_B) && IterationIndex == 0)
+        // {
+        //     Breakpoint;
+        // }
 
         // NOTE: Get closest contacts and ground contact for the moving entity
         collision_contact ClosestContacts[COLLISION_CONTACTS_PER_ITERATION] = {};
-        collision_contact GroundContact;
-        CheckCollisionsForEntity(GameState, Player, PlayerTranslation,
-                                 ArrayCount(ClosestContacts), ClosestContacts, &GroundContact);
+        CheckCollisionsForEntity(GameState, Player, PlayerTranslation, ArrayCount(ClosestContacts), ClosestContacts);
 
         // NOTE: Find the closest valid contact (has to be against the direction of the translation in the ground space)
         collision_contact ClosestContact = CollisionContact();
@@ -649,7 +671,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         }
 
         // NOTE: if no valid closest contact, safe to move; if there is a valid contact, try to resolve it and continue with the next iteration
-        if (!ClosestContact.Entity && !GroundContact.Entity)
+        if (!ClosestContact.Entity)
         {
             TranslationIsSafe = true;
 
@@ -664,22 +686,44 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 break;
             }
 
-            vec3 CollidingNormal = ClosestContact.Normal;
-
-            PlayerTranslation += AbsF(VecDot(CollidingNormal, PlayerTranslation)) * CollidingNormal;
-            GameState->PlayerVelocity += AbsF(VecDot(CollidingNormal, GameState->PlayerVelocity)) * CollidingNormal;
-
-            if (GroundContact.Entity)
+            vec3 CollidingTranslationComponent;
+            vec3 CollidingVelocityComponent;
+            if (IsGroundContact(&ClosestContact))
             {
-                PlayerTranslation += AbsF(VecDot(GroundContact.Normal, PlayerTranslation)) * GroundContact.Normal;
-                GameState->PlayerVelocity += AbsF(VecDot(GroundContact.Normal, GameState->PlayerVelocity)) * GroundContact.Normal;
-            }
+                FoundNewGround = true;
+                NewGroundNormal = ClosestContact.Normal;
 
-            DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + CollidingNormal,
-                               Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
+                CollidingTranslationComponent = AbsF(VecDot(ClosestContact.Normal, PlayerTranslation)) * ClosestContact.Normal;
+                CollidingVelocityComponent = AbsF(VecDot(ClosestContact.Normal, GameState->PlayerVelocity)) * ClosestContact.Normal;
+            }
+            else
+            {
+                if (GameState->PlayerOnGround)
+                {
+                    ClosestContact.Normal.Y = 0;
+                    CollidingTranslationComponent = AbsF(VecDot(ClosestContact.Normal, PlayerTranslation)) * ClosestContact.Normal;
+                    CollidingTranslationComponent.Y = -PlayerTranslation.Y;
+                    CollidingVelocityComponent = AbsF(VecDot(ClosestContact.Normal, GameState->PlayerVelocity)) * ClosestContact.Normal;
+                    CollidingVelocityComponent.Y = -GameState->PlayerVelocity.Y;
+                }
+                else
+                {
+                    CollidingTranslationComponent = AbsF(VecDot(ClosestContact.Normal, PlayerTranslation)) * ClosestContact.Normal;
+                    CollidingVelocityComponent = AbsF(VecDot(ClosestContact.Normal, GameState->PlayerVelocity)) * ClosestContact.Normal;
+                }
+            }
+            
+            PlayerTranslation += CollidingTranslationComponent;
+            GameState->PlayerVelocity += CollidingVelocityComponent;
+
+            // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + ClosestContact.Normal,
+            //                    Vec3(IterationIndex == 0, IterationIndex == 1, IterationIndex == 2));
 
         }
     }
+
+    GameState->PlayerOnGround = FoundNewGround;
+    GameState->GroundNormal = NewGroundNormal;
 
     f32 ActualTranslationLengthThisFrame = 0;
     if (TranslationIsSafe)
