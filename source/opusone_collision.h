@@ -88,6 +88,7 @@ struct collision_contact
     vec3 Normal;
     f32 Depth;
     entity *Entity;
+    u32 PolyhedronIndex;
 };
 
 inline collision_contact
@@ -112,7 +113,7 @@ InitializeContactArray(collision_contact *Contacts, u32 ContactCount)
 }
 
 inline b32
-PopulateContact(collision_contact *Contact, vec3 Normal, f32 Depth, entity *Entity)
+PopulateContact(collision_contact *Contact, vec3 Normal, f32 Depth, entity *Entity, u32 PolyhedronIndex)
 {
     Assert(Contact);
     
@@ -121,6 +122,7 @@ PopulateContact(collision_contact *Contact, vec3 Normal, f32 Depth, entity *Enti
         Contact->Normal = Normal;
         Contact->Depth = Depth;
         Contact->Entity = Entity;
+        Contact->PolyhedronIndex = PolyhedronIndex;
         return true;
     }
 
@@ -128,9 +130,9 @@ PopulateContact(collision_contact *Contact, vec3 Normal, f32 Depth, entity *Enti
 }
 
 inline b32
-PopulateContactArray(collision_contact *Contacts, u32 ContactCount, vec3 Normal, f32 Depth, entity *Entity)
+PopulateContactArray(collision_contact *Contacts, u32 ContactCount, vec3 Normal, f32 Depth, entity *Entity, u32 PolyhedronIndex)
 {
-    b32 ContactAdded = PopulateContact(Contacts + ContactCount-1, Normal, Depth, Entity);
+    b32 ContactAdded = PopulateContact(Contacts + ContactCount-1, Normal, Depth, Entity, PolyhedronIndex);
     b32 NeedAnotherSortingIteration = ContactAdded;
 
     while (NeedAnotherSortingIteration)
@@ -159,6 +161,15 @@ IsGroundContact(collision_contact *Contact, f32 VerticalAngleThresholdDegrees = 
     f32 VerticalSine = VecDot(Contact->Normal, Vec3(0,1,0));
     f32 VerticalCollisionAngleThreshold = ToRadiansF(VerticalAngleThresholdDegrees);
     b32 Result = (VerticalSine > SinF(VerticalCollisionAngleThreshold));
+    return Result;
+}
+
+inline b32
+AreContactsSame(collision_contact *ContactA, collision_contact *ContactB)
+{
+    b32 Result = (ContactA->Entity == ContactB->Entity &&
+                  ContactA->PolyhedronIndex == ContactB->PolyhedronIndex &&
+                  AreVecEqual(ContactA->Normal, ContactB->Normal));
     return Result;
 }
 

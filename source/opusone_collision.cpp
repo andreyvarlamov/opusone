@@ -1023,7 +1023,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
 
                         if (!AreSeparated)
                         {
-                            b32 ContactAdded = PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
+                            b32 ContactAdded = PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity, PolyhedronIndex);
                             if (ContactAdded)
                             {
                                 edge *EdgeCursor = Polyhedron->Edges;
@@ -1100,7 +1100,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
 
                     if (!SeparatingAxisFound)
                     {
-                        PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity);
+                        PopulateContactArray(Out_ClosestContacts, MaxClosestContactCount, ThisCollisionNormal, ThisPenetrationDepth, TestEntity, 0);
                     }
 
                     // DD_DrawQuickAABox(TestEntity->WorldPosition.P + TestAABB->Center, TestAABB->Extents,
