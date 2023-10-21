@@ -202,6 +202,6 @@ IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, 
 struct game_state;
 void
 CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation,
-                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts);
+                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts, b32 DebugPrint);
 
 #endif

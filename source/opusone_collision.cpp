@@ -509,14 +509,22 @@ GetRangesOverlap(f32 AMin, f32 AMax, f32 BMin, f32 BMax, b32 *Out_BComesFirst)
 }
 
 b32
-AreSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap)
+AreSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOverlapAxis, f32 *Out_SmallestOverlap, b32 DebugPrint)
 {
     vec3 SmallestOverlapAxis = {};
     f32 SmallestOverlap = FLT_MAX;
+    u32 SmallestAxisIndex = 0;
+    u32 AxisIndex = 0;
     
     //
     // NOTE: 1. Check box face normals
     //
+
+    b32 FoundSeparating = false;
+    
+    if (DebugPrint) printf("----------------------\n");
+    if (DebugPrint) printf("Box-Polyhedron SAT log:\n");
+    if (DebugPrint) printf("Box face normals:\n");
     for (u32 BoxAxisIndex = 0;
          BoxAxisIndex < 3;
          ++BoxAxisIndex)
@@ -531,21 +539,29 @@ AreSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOv
         b32 IsBoxInFront;
         f32 Overlap = GetRangesOverlap(BoxMinProj, BoxMaxProj, PolyhedronMinProj, PolyhedronMaxProj, &IsBoxInFront);
 
-        if (Overlap < 0.0f)
-        {
-            return true;
-        }
-
-        if (Overlap < SmallestOverlap)
+        b32 ReplacedSmallest = false;
+        if (Overlap >= 0.0f && Overlap < SmallestOverlap)
         {
             SmallestOverlap = Overlap;
             SmallestOverlapAxis = IsBoxInFront ? TestAxis : -TestAxis;
+            ReplacedSmallest = true;
+            SmallestAxisIndex = AxisIndex;
         }
+
+        if (DebugPrint) printf("%d:(%d){%0.6f,%0.6f,%0.6f}:Box[%0.6f,%0.6f];Poly[%0.6f,%0.6f];BFront=%d;Overlap=%0.6f;Smallest=%d\n", AxisIndex, BoxAxisIndex, TestAxis.X,  TestAxis.Y, TestAxis.Z, BoxMinProj, BoxMaxProj, PolyhedronMinProj, PolyhedronMaxProj, IsBoxInFront, Overlap, ReplacedSmallest);
+
+        if (Overlap < 0.0f)
+        {
+            FoundSeparating = true;
+        }
+
+        ++AxisIndex;
     }
 
     //
     // NOTE: 2. Check polyhedron face normals
     //
+    if (DebugPrint) printf("Poly face normals:\n");
     for (u32 FaceIndex = 0;
          FaceIndex < Polyhedron->FaceCount;
          ++FaceIndex)
@@ -560,21 +576,29 @@ AreSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOv
         b32 IsBoxInFront;
         f32 Overlap = GetRangesOverlap(BoxMinProj, BoxMaxProj, PolyhedronMinProj, PolyhedronMaxProj, &IsBoxInFront);
 
-        if (Overlap < 0.0f)
-        {
-            return true;
-        }
-
-        if (Overlap < SmallestOverlap)
+        b32 ReplacedSmallest = false;
+        if (Overlap >= 0.0f && Overlap < SmallestOverlap)
         {
             SmallestOverlap = Overlap;
             SmallestOverlapAxis = IsBoxInFront ? TestAxis : -TestAxis;
+            ReplacedSmallest = true;
+            SmallestAxisIndex = AxisIndex;
         }
+
+        if (DebugPrint) printf("%d:(%d){%0.6f,%0.6f,%0.6f}:Box[%0.6f,%0.6f];Poly[%0.6f,%0.6f];BFront=%d;Overlap=%0.6f;Smallest=%d\n", AxisIndex, FaceIndex, TestAxis.X,  TestAxis.Y, TestAxis.Z, BoxMinProj, BoxMaxProj, PolyhedronMinProj, PolyhedronMaxProj, IsBoxInFront, Overlap, ReplacedSmallest);
+
+        if (Overlap < 0.0f)
+        {
+            FoundSeparating = true;
+        }
+
+        ++AxisIndex;
     }
 
     //
     // NOTE: 3. Check cross products of edges
     //
+    if (DebugPrint) printf("Edge cross products:\n");
     for (u32 BoxAxisIndex = 0;
          BoxAxisIndex < 3;
          ++BoxAxisIndex)
@@ -597,22 +621,36 @@ AreSeparatedBoxPolyhedron(polyhedron *Polyhedron, box *Box, vec3 *Out_SmallestOv
 
                 if (Overlap < 0.0f)
                 {
-                    return true;
+                    FoundSeparating = true;
                 }
 
+                b32 ReplacedSmallest = false;
                 if (Overlap < SmallestOverlap)
                 {
                     SmallestOverlap = Overlap;
                     SmallestOverlapAxis = IsBoxInFront ? TestAxis : -TestAxis;
+                    ReplacedSmallest = true;
+                    SmallestAxisIndex = AxisIndex;
                 }
+                
+                if (DebugPrint) printf("%d:(%d,%d){%0.6f,%0.6f,%0.6f}:Box[%0.6f,%0.6f];Poly[%0.6f,%0.6f];BFront=%d;p=%0.6f;Smallest=%d\n", AxisIndex, BoxAxisIndex, PolyhedronEdgeIndex, TestAxis.X,  TestAxis.Y, TestAxis.Z, BoxMinProj, BoxMaxProj, PolyhedronMinProj, PolyhedronMaxProj, IsBoxInFront, Overlap, ReplacedSmallest);
             }
+            else
+            {
+                if (DebugPrint) printf("%d:(%d,%d){%0.6f,%0.6f,%0.6f}:Zero Vector - won't be separating\n", AxisIndex, BoxAxisIndex, PolyhedronEdgeIndex, TestAxis.X, TestAxis.Y, TestAxis.Z);
+            }
+
+            ++AxisIndex;
         }
     }
 
     if (Out_SmallestOverlap) *Out_SmallestOverlap = SmallestOverlap;
     if (Out_SmallestOverlapAxis) *Out_SmallestOverlapAxis = SmallestOverlapAxis;
 
-    return false;
+    if (DebugPrint) printf("Done checking axes. FoundSeparating=%d; SmallestOverlap=%0.6f; SmallestOverlapAxis={%0.6f,%0.6f,%0.6f}; SmallestAxisIndex=%d\n",
+                           FoundSeparating, SmallestOverlap, SmallestOverlapAxis.X, SmallestOverlapAxis.Y, SmallestOverlapAxis.Z, SmallestAxisIndex);
+
+    return FoundSeparating;
 }
 
 inline void
@@ -969,7 +1007,7 @@ IntersectRayTri(vec3 P, vec3 D, vec3 A, vec3 B, vec3 C, f32 *Out_U, f32 *Out_V, 
 
 void
 CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation,
-                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts)
+                         u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts, b32 DebugPrint)
 {
     Assert(Out_ClosestContacts);
     Assert(MaxClosestContactCount > 0);
@@ -1019,7 +1057,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
                         f32 ThisPenetrationDepth;
                         vec3 ThisCollisionNormal;
                         b32 AreSeparated =
-                            AreSeparatedBoxPolyhedron(Polyhedron, &EntityBox, &ThisCollisionNormal, &ThisPenetrationDepth);
+                            AreSeparatedBoxPolyhedron(Polyhedron, &EntityBox, &ThisCollisionNormal, &ThisPenetrationDepth, DebugPrint && TestEntity->Type == EntityType_ObstacleCourse && PolyhedronIndex == 9);
 
                         if (!AreSeparated)
                         {
