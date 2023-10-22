@@ -616,6 +616,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
                               GameState->PlayerVelocity * GameInput->DeltaTime);
 
+     DD_DrawQuickAABox(Player->WorldPosition.P + PlayerTranslation + PlayerSpec->CollisionGeometry->AABB.Center,
+                      PlayerSpec->CollisionGeometry->AABB.Extents,
+                      Vec3(1));
+    
     GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
 
     ImmText_DrawQuickString(SimpleStringF("Player velocity: {%0.3f,%0.3f,%0.3f}",
