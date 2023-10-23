@@ -74,6 +74,8 @@ struct game_state
 
     b32 MouseControlledTemp;
     b32 GravityDisabledTemp;
+
+    u32 IterationToDebug;
 };
 
 #endif

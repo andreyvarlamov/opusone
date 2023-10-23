@@ -461,6 +461,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->GroundContact = CollisionContact(); GameState->GroundContact.Normal = Vec3(0,1,0);
     }
 
+    ImmText_DrawQuickString(SimpleStringF("Iteration To Debug: %d/%d", GameState->IterationToDebug, COLLISION_ITERATIONS + 1).D);
+    
     //
     // NOTE: Process controls
     //
@@ -483,6 +485,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F3))
     {
         GameState->GravityDisabledTemp = !GameState->GravityDisabledTemp;
+    }
+    if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_F4))
+    {
+        if (++GameState->IterationToDebug > COLLISION_ITERATIONS + 1) GameState->IterationToDebug = 0;
     }
     
     // NOTE: Gameplay keys
@@ -577,10 +583,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         // NOTE: Gravity
         PlayerAcceleration.Y = GameState->PlayerSpecGravityValue;
         
-        // if (RequestedControls->PlayerJump && GameState->PlayerOnGround)
-        // {
-        //     GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
-        // }
     }
 
     if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_B))
@@ -590,22 +592,22 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         
     {
         vec3 GroundNormal = GameState->GroundContact.Normal;
-        DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + VecNormalize(GroundNormal), Vec3(0,1,0));
         vec3 PlayerRight = RotateVecByQuatSlow(Vec3(-1,0,0), Player->WorldPosition.R);
         vec3 GroundForward = VecNormalize(VecCross(GroundNormal, PlayerRight));
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + GroundForward, Vec3(0,0,1));
         vec3 GroundRight = VecCross(GroundForward, GroundNormal);
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + GroundRight, Vec3(1,0,0));
-        // mat3 GroundTransform = Mat3(GroundRight, GroundNormal, GroundForward);
 
         vec3 ForwardComponent = PlayerAcceleration.Z * GroundForward;
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + ForwardComponent, Vec3(0,0,1));
         vec3 RightComponent = PlayerAcceleration.X * GroundRight;
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + RightComponent, Vec3(1,0,0));
         vec3 UpComponent = PlayerAcceleration.Y * GroundNormal;
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + UpComponent, Vec3(0,1,0));
         
-        PlayerAcceleration = -ForwardComponent + RightComponent + UpComponent;
+        PlayerAcceleration = VecNormalize(-ForwardComponent + RightComponent) + UpComponent;
+
+        DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + VecNormalize(GroundNormal), Vec3(0,1,0));
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + GroundForward, Vec3(0,0,1));
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + GroundRight, Vec3(1,0,0));
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + ForwardComponent, Vec3(0,0,1));
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + RightComponent, Vec3(1,0,0));
+        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + UpComponent, Vec3(0,1,0));
     }
 
     PlayerAcceleration *= GameState->PlayerSpecAccelerationValue;
@@ -616,16 +618,17 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
                               GameState->PlayerVelocity * GameInput->DeltaTime);
 
-     DD_DrawQuickAABox(Player->WorldPosition.P + PlayerTranslation + PlayerSpec->CollisionGeometry->AABB.Center,
-                      PlayerSpec->CollisionGeometry->AABB.Extents,
-                      Vec3(1));
-    
     GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
 
     ImmText_DrawQuickString(SimpleStringF("Player velocity: {%0.3f,%0.3f,%0.3f}",
                                           GameState->PlayerVelocity.X, GameState->PlayerVelocity.Y, GameState->PlayerVelocity.Z).D);
     ImmText_DrawQuickString(SimpleStringF("Player position: {%0.3f,%0.3f,%0.3f}",
                                           Player->WorldPosition.P.X, Player->WorldPosition.P.Y, Player->WorldPosition.P.Z).D);
+
+    if (!GameState->GravityDisabledTemp && RequestedControls->PlayerJump && GameState->PlayerOnGround)
+    {
+        GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
+    }
 
     // NOTE: Entity AI updates
     // ....
@@ -642,10 +645,23 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
          IterationIndex < CollisionIterations;
          ++IterationIndex)
     {
+        if (IterationIndex == GameState->IterationToDebug)
+        {
+            DD_DrawQuickAABox(Player->WorldPosition.P + PlayerTranslation + PlayerSpec->CollisionGeometry->AABB.Center,
+                              PlayerSpec->CollisionGeometry->AABB.Extents,
+                              Vec3(1));
+        }
+    
         // TODO: Make this proper
         if (IgnoreCollisions)
         {
             TranslationIsSafe = true;
+            break;
+        }
+
+        if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_GRAVE))
+        {
+            TranslationIsSafe = false;
             break;
         }
 
@@ -710,6 +726,24 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
             vec3 CollidingTranslationComponent;
             vec3 CollidingVelocityComponent;
+
+            if (ContactToResolve.Depth < 5.0f)
+            {
+                CollidingTranslationComponent = 1.01f * ContactToResolve.Depth * ContactToResolve.Normal;
+            }
+            else
+            {
+                CollidingTranslationComponent = AbsF(VecDot(ContactToResolve.Normal, PlayerTranslation)) * ContactToResolve.Normal;
+            }
+            CollidingVelocityComponent = AbsF(VecDot(ContactToResolve.Normal, GameState->PlayerVelocity)) * ContactToResolve.Normal;
+            
+            if (IsContactToResolveGround)
+            {
+                FoundGroundThisFrame = true;
+                GroundContactThisFrame = ContactToResolve;
+            }
+
+#if 0
             if (IsContactToResolveGround)
             {
                 FoundGroundThisFrame = true;
@@ -734,6 +768,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     CollidingVelocityComponent = AbsF(VecDot(ContactToResolve.Normal, GameState->PlayerVelocity)) * ContactToResolve.Normal;
                 }
             }
+#endif
             
             PlayerTranslation += CollidingTranslationComponent;
             GameState->PlayerVelocity += CollidingVelocityComponent;
