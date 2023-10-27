@@ -1115,3 +1115,10 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
         }
     }
 }
+
+vec3
+GetCollidingVectorComponent(vec3 V, collision_contact *Contact)
+{
+    vec3 Result = AbsF(VecDot(Contact->Normal, V)) * Contact->Normal;
+    return Result;
+}

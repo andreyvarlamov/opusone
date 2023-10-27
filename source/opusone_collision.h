@@ -204,4 +204,7 @@ void
 CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTranslation,
                          u32 MaxClosestContactCount, collision_contact *Out_ClosestContacts);
 
+vec3
+GetCollidingVectorComponent(vec3 V, collision_contact *Contact);
+
 #endif

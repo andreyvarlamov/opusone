@@ -64,6 +64,7 @@ struct game_state
     
     f32 PlayerEyeHeight;
     vec3 PlayerVelocity;
+    vec3 PlayerGravityVelocity;
     b32 PlayerOnGround;
     collision_contact GroundContact;
     /* mat3 GroundSpaceTransform; */
