@@ -83,12 +83,31 @@ union collision_geometry
     polyhedron_set PolyhedronSet;
 };
 
+enum feature_type
+{
+    FeatureType_FaceA,
+    FeatureType_FaceB,
+    FeatureType_EdgeCross
+};
+
+struct collision_feature
+{
+    feature_type FeatureType;
+    u32 EdgeAIndex;
+    vec3 EdgeA;
+    u32 EdgeBIndex;
+    vec3 EdgeB;
+    u32 FaceIndex;
+    vec3 FaceNormal;
+};
+
 struct collision_contact
 {
     vec3 Normal;
     f32 Depth;
     entity *Entity;
     u32 PolyhedronIndex;
+    collision_feature Feature;
 };
 
 inline collision_contact

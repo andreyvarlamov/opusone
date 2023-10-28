@@ -620,8 +620,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
                               GameState->PlayerVelocity * GameInput->DeltaTime);
 
-    vec3 PlayerGravityTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
-                                     GameState->PlayerVelocity * GameInput->DeltaTime);
+    vec3 PlayerGravityTranslation = (0.5f * PlayerGravityAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
+                                     GameState->PlayerGravityVelocity * GameInput->DeltaTime);
 
     GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
     GameState->PlayerGravityVelocity += PlayerGravityAcceleration * GameInput->DeltaTime;
@@ -874,8 +874,13 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         // NOTE: Iteration 6,7,8: To the result of previous iterations, add gravity translation. If all resolved, can early out.
         // If found a ground, don't apply gravity translation. If found a wall, adjust gravity translation normally.
         // I8 just to check if collisions were resolved. If I8 still found collisions, translation is not safe.
+
+        // TODO: Added collision feature to collision contact. There was a collision with polyhedron 8 when crossing on top from 9.
+        // From gravity translation. Check what was that feature, and why it's not the top face.
+        // May need to start prioritizing ground contacts over wall contacts for iterations 6,7,8
+
         vec3 TranslationWithGravity = AdjustedTranslation + PlayerGravityTranslation;
-        if (ContinueIterations && TranslationIsSafe)
+        if (TranslationIsSafe)
         {
             collision_contact ClosestContact;
             CheckCollisionsForEntity(GameState, Player, TranslationWithGravity, 1, &ClosestContact);
@@ -886,10 +891,12 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 {
                     GroundContactThisFrame = ClosestContact;
                     FoundGroundThisFrame = true;
+                    TranslationWithGravity = AdjustedTranslation;
                     ContinueIterations = false;
                 }
                 else
                 {
+                    ContinueIterations = true;
                     TranslationWithGravity += GetCollidingVectorComponent(TranslationWithGravity, &ClosestContact);
                 }
             }
@@ -907,6 +914,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                 {
                     GroundContactThisFrame = ClosestContact;
                     FoundGroundThisFrame = true;
+                    TranslationWithGravity = AdjustedTranslation;
                     ContinueIterations = false;
                 }
                 else
