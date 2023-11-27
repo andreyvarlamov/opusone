@@ -15,6 +15,9 @@
 
 #include "opusone_debug_draw.cpp"
 
+global_variable f32 AdamHeight = 1.8412f;
+global_variable f32 AdamHalfHeight = AdamHeight * 0.5f;
+
 void
 GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameShouldQuit)
 {
@@ -107,8 +110,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     Spec->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, "resources/models/adam/adam_new.gltf");
 
                     // TODO: This info should come from the importer later
-                    f32 AdamHeight = 1.8412f;
-                    f32 AdamHalfHeight = AdamHeight * 0.5f;
 
                     {
                         Spec->CollisionType = COLLISION_TYPE_AABB;
@@ -459,6 +460,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->PlayerSpecGravityValue = -2.0f;
         GameState->PlayerSpecDragValue = 50.0f;
         GameState->GroundContact = CollisionContact(); GameState->GroundContact.Normal = Vec3(0,1,0);
+        GameState->PlayerEllipsoidDim = Vec3(0.3f, AdamHalfHeight, 0.3f);
     }
 
     ImmText_DrawQuickString(SimpleStringF("Iteration To Debug: %d/%d", GameState->IterationToDebug, COLLISION_ITERATIONS + 1).D);
@@ -568,398 +570,194 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         Player->WorldPosition.R = CameraGetYawQuat(&GameState->Camera);
     }
 
-    vec3 PlayerAcceleration = {};
-    if (RequestedControls->PlayerForward) PlayerAcceleration.Z -= 1.0f;
-    if (RequestedControls->PlayerBackward) PlayerAcceleration.Z += 1.0f;
-    if (RequestedControls->PlayerLeft) PlayerAcceleration.X -= 1.0f;
-    if (RequestedControls->PlayerRight) PlayerAcceleration.X += 1.0f;
-    if (GameState->GravityDisabledTemp)
-    {
-        if (RequestedControls->PlayerDown) PlayerAcceleration.Y -= 1.0f;
-        if (RequestedControls->PlayerUp) PlayerAcceleration.Y += 1.0f;
-    }
-    // if (!IsZeroVector(PlayerAcceleration))
-    // {
-    //     PlayerAcceleration = GameState->PlayerSpecAccelerationValue * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), Player->WorldPosition.R);
-    // }
-
-    if (!IsZeroVector(PlayerAcceleration))
-    {
-        vec3 GroundNormal = GameState->GroundContact.Normal;
-        vec3 PlayerRight = RotateVecByQuatSlow(Vec3(-1,0,0), Player->WorldPosition.R);
-        vec3 GroundForward = VecNormalize(VecCross(GroundNormal, PlayerRight));
-        vec3 GroundRight = VecCross(GroundForward, GroundNormal);
-
-        vec3 ForwardComponent = PlayerAcceleration.Z * GroundForward;
-        vec3 RightComponent = PlayerAcceleration.X * GroundRight;
-        vec3 UpComponent = PlayerAcceleration.Y * GroundNormal;
-        
-        PlayerAcceleration = VecNormalize(-ForwardComponent + RightComponent) + UpComponent;
-
-        DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + VecNormalize(GroundNormal), Vec3(0,1,0));
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + GroundForward, Vec3(0,0,1));
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + GroundRight, Vec3(1,0,0));
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + ForwardComponent, Vec3(0,0,1));
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + RightComponent, Vec3(1,0,0));
-        // DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + UpComponent, Vec3(0,1,0));
-
-        PlayerAcceleration *= GameState->PlayerSpecAccelerationValue;
-    }
-
-    vec3 PlayerGravityAcceleration = {};
-    if (!GameState->GravityDisabledTemp)
-    {
-        // NOTE: Gravity
-        PlayerGravityAcceleration.Y = GameState->PlayerSpecGravityValue * GameState->PlayerSpecAccelerationValue;
-    }
-
-    // NOTE: Drag
-    PlayerAcceleration -= GameState->PlayerSpecDragValue * GameState->PlayerVelocity;
-    PlayerGravityAcceleration -= GameState->PlayerSpecDragValue * GameState->PlayerGravityVelocity;
-    
-    vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
-                              GameState->PlayerVelocity * GameInput->DeltaTime);
-
-    vec3 PlayerGravityTranslation = (0.5f * PlayerGravityAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
-                                     GameState->PlayerGravityVelocity * GameInput->DeltaTime);
-
-    GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
-    GameState->PlayerGravityVelocity += PlayerGravityAcceleration * GameInput->DeltaTime;
-
-    // TODO: Better jump code
-    if (!GameState->GravityDisabledTemp && RequestedControls->PlayerJump && GameState->PlayerOnGround)
-    {
-        GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
-    }
 
     // NOTE: Entity AI updates
     // ....
 
     // NOTE: Process entity movement
-    // u32 CollisionIterations = COLLISION_ITERATIONS + 1; // NOTE: Last iteration is only to check if can move after prev iteration
-    // if (IgnoreCollisions)
-    // {
-    //     TranslationIsSafe = true;
-    //     break;
-    // }
-
-    // if (Platform_KeyIsDown(GameInput, SDL_SCANCODE_GRAVE))
-    // {
-    //     TranslationIsSafe = false;
-    //     break;
-    // }
-
-    // // if (Platform_KeyJustPressed(GameInput, SDL_SCANCODE_B) && IterationIndex == 0)
-    // // {
-    // //     Breakpoint;
-    // // }
-
-    // collision_contact ClosestContacts[COLLISION_CONTACTS_PER_ITERATION] = {};
-    // CheckCollisionsForEntity(GameState, Player, PlayerTranslation, ArrayCount(ClosestContacts), ClosestContacts);
-
-    // collision_contact ContactToResolve = CollisionContact();
-    // b32 IsContactToResolveGround = false;
-    // {
-    //     b32 FoundSameGroundContact = false;
-    //     for (u32 ContactIndex = 0;
-    //          ContactIndex < ArrayCount(ClosestContacts);
-    //          ++ContactIndex)
-    //     { 
-    //         collision_contact *Contact = ClosestContacts + ContactIndex;
-    //         if (IsGroundContact(Contact) && GameState->PlayerOnGround && AreContactsSame(Contact, &GameState->GroundContact))
-    //         {
-    //             ContactToResolve = *Contact;
-    //             FoundSameGroundContact = true;
-    //             IsContactToResolveGround = true;
-    //             break;
-    //         }
-    //     }
-
-    //     if (!FoundSameGroundContact)
-    //     {
-    //         for (u32 ContactIndex = 0;
-    //              ContactIndex < ArrayCount(ClosestContacts);
-    //              ++ContactIndex)
-    //         {
-    //             collision_contact *Contact = ClosestContacts + ContactIndex;
-    //             if (Contact->Entity)
-    //                 // VecDot(Contact->Normal, PlayerTranslation) < -FLT_EPSILON)
-    //             {
-    //                 ContactToResolve = *Contact;
-    //                 IsContactToResolveGround = IsGroundContact(Contact);
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // }
-    //     if (IsContactToResolveGround)
-    //     {
-    //         FoundGroundThisFrame = true;
-    //         GroundContactThisFrame = ContactToResolve;
-
-    //         CollidingTranslationComponent = AbsF(VecDot(ContactToResolve.Normal, PlayerTranslation)) * ContactToResolve.Normal;
-    //         CollidingVelocityComponent = AbsF(VecDot(ContactToResolve.Normal, GameState->PlayerVelocity)) * ContactToResolve.Normal;
-    //     }
-    //     else
-    //     {
-    //         if (GameState->PlayerOnGround)
-    //         {
-    //             ContactToResolve.Normal.Y = 0;
-    //             CollidingTranslationComponent = AbsF(VecDot(ContactToResolve.Normal, PlayerTranslation)) * ContactToResolve.Normal;
-    //             CollidingTranslationComponent.Y = -PlayerTranslation.Y;
-    //             CollidingVelocityComponent = AbsF(VecDot(ContactToResolve.Normal, GameState->PlayerVelocity)) * ContactToResolve.Normal;
-    //             CollidingVelocityComponent.Y = -GameState->PlayerVelocity.Y;
-    //         }
-    //         else
-    //         {
-    //             CollidingTranslationComponent = AbsF(VecDot(ContactToResolve.Normal, PlayerTranslation)) * ContactToResolve.Normal;
-    //             CollidingVelocityComponent = AbsF(VecDot(ContactToResolve.Normal, GameState->PlayerVelocity)) * ContactToResolve.Normal;
-    //         }
-    //     }
-    //     PlayerTranslation += CollidingTranslationComponent;
-    //     GameState->PlayerVelocity += CollidingVelocityComponent;
-
-    b32 TranslationIsSafe = true;
-    b32 FoundGroundThisFrame = false;
-    collision_contact GroundContactThisFrame = CollisionContact();
-    GroundContactThisFrame.Normal = Vec3(0,1,0);
-    vec3 AdjustedTranslation = PlayerTranslation;
-    u32 IterationIndex = 0;
-        
-    if (!IgnoreCollisions)
+    vec3 PlayerAcceleration = {};
+    if (RequestedControls->PlayerForward) PlayerAcceleration.Z -= 1.0f;
+    if (RequestedControls->PlayerBackward) PlayerAcceleration.Z += 1.0f;
+    if (RequestedControls->PlayerLeft) PlayerAcceleration.X -= 1.0f;
+    if (RequestedControls->PlayerRight) PlayerAcceleration.X += 1.0f;
+    // if (GameState->GravityDisabledTemp)
     {
-        b32 ContinueIterations = true;
-
-        // NOTE: Iteration 0: Find up to 2 collisions: A and B
-        collision_contact CollisionA = {};
-        collision_contact CollisionB = {};
-        b32 ShouldTryCollisionB = false;
-        vec3 AltAdjustedTranslation = Vec3();
-        {
-            collision_contact ClosestContacts[2] = {};
-            CheckCollisionsForEntity(GameState, Player, AdjustedTranslation, ArrayCount(ClosestContacts), ClosestContacts);
-
-            CollisionA = ClosestContacts[0];
-            CollisionB = ClosestContacts[1];
-
-            if (CollisionA.Entity)
-            { 
-                AdjustedTranslation += GetCollidingVectorComponent(AdjustedTranslation, &CollisionA);
-
-                if (CollisionB.Entity)
-                {
-                    AltAdjustedTranslation += GetCollidingVectorComponent(AdjustedTranslation, &CollisionB);
-                }
-            }
-            else
-            {
-                ContinueIterations = false;
-            }
-        }
-        ++IterationIndex;
-
-        // NOTE: Iteration 1: Check collisions if collision A is solved, and see if it also solves collision B
-        if (ContinueIterations)
-        {
-            collision_contact ClosestContacts[4] = {};
-            CheckCollisionsForEntity(GameState, Player, AdjustedTranslation, ArrayCount(ClosestContacts), ClosestContacts);
-
-            if (ClosestContacts[0].Entity)
-            {
-                AdjustedTranslation += GetCollidingVectorComponent(AdjustedTranslation, ClosestContacts);
-                
-                for (u32 ContactIndex = 0;
-                     ContactIndex < ArrayCount(ClosestContacts);
-                     ++ContactIndex)
-                {
-                    collision_contact *Contact = ClosestContacts + ContactIndex;
-                
-                    if (AreContactsSame(Contact, &CollisionB))
-                    {
-                        ShouldTryCollisionB = true;
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                ContinueIterations = false;
-            }
-        }
-        ++IterationIndex;
-
-        // NOTE: Iteration 2: Check collisions if collision B is solved, and see if it also solves collision A
-        if (ContinueIterations && ShouldTryCollisionB)
-        {
-            collision_contact ClosestContacts[4] = {};
-            CheckCollisionsForEntity(GameState, Player, AltAdjustedTranslation, ArrayCount(ClosestContacts), ClosestContacts);
-
-            if (ClosestContacts[0].Entity)
-            {
-                b32 CollisionAResolved = true;
-                for (u32 ContactIndex = 0;
-                     ContactIndex < ArrayCount(ClosestContacts);
-                     ++ContactIndex)
-                {
-                    collision_contact *Contact = ClosestContacts + ContactIndex;
-                
-                    if (AreContactsSame(Contact, &CollisionA))
-                    {
-                        CollisionAResolved = false;
-                        break;
-                    }
-                }
-
-                if (CollisionAResolved)
-                {
-                    AdjustedTranslation = AltAdjustedTranslation;
-                }
-            }
-            else
-            {
-                AdjustedTranslation = AltAdjustedTranslation;
-                ContinueIterations = false;
-            }
-        }
-        ++IterationIndex;
-
-        // NOTE: Iteration 3,4,5: Starting with the result of I1 or I2, iterate to solve the rest of collisions. If all resolved, can early out.
-        // I5 just to check if collisions were resolved. If I5 still found collisions, translation is not safe.
-        if (ContinueIterations)
-        {
-            collision_contact ClosestContact;
-            CheckCollisionsForEntity(GameState, Player, AdjustedTranslation, 1, &ClosestContact);
-
-            if (ClosestContact.Entity)
-            {
-                AdjustedTranslation += GetCollidingVectorComponent(AdjustedTranslation, &ClosestContact);
-            }
-            else
-            {
-                ContinueIterations = false;
-            }
-        }
-        ++IterationIndex;
-        
-        // TODO: Wonder if iteration 4 is helpful at all
-        if (ContinueIterations)
-        {
-            collision_contact ClosestContact;
-            CheckCollisionsForEntity(GameState, Player, AdjustedTranslation, 1, &ClosestContact);
- 
-            if (ClosestContact.Entity)
-            {
-                AdjustedTranslation += GetCollidingVectorComponent(AdjustedTranslation, &ClosestContact);
-            }
-            else
-            {
-                ContinueIterations = false;
-            }
-       }
-        ++IterationIndex;
-        
-        if (ContinueIterations)
-        {
-            collision_contact ClosestContact;
-            CheckCollisionsForEntity(GameState, Player, AdjustedTranslation, 1, &ClosestContact);
-
-            if (ClosestContact.Entity)
-            {
-                TranslationIsSafe = false;
-                ContinueIterations = false;
-            }
-        }
-        ++IterationIndex;
-
-        // NOTE: Iteration 6,7,8: To the result of previous iterations, add gravity translation. If all resolved, can early out.
-        // If found a ground, don't apply gravity translation. If found a wall, adjust gravity translation normally.
-        // I8 just to check if collisions were resolved. If I8 still found collisions, translation is not safe.
-
-        // TODO: Added collision feature to collision contact. There was a collision with polyhedron 8 when crossing on top from 9.
-        // From gravity translation. Check what was that feature, and why it's not the top face.
-        // May need to start prioritizing ground contacts over wall contacts for iterations 6,7,8
-
-        vec3 TranslationWithGravity = AdjustedTranslation + PlayerGravityTranslation;
-        if (TranslationIsSafe)
-        {
-            collision_contact ClosestContact;
-            CheckCollisionsForEntity(GameState, Player, TranslationWithGravity, 1, &ClosestContact);
-
-            if (ClosestContact.Entity)
-            {
-                if (IsGroundContact(&ClosestContact))
-                {
-                    GroundContactThisFrame = ClosestContact;
-                    FoundGroundThisFrame = true;
-                    TranslationWithGravity = AdjustedTranslation;
-                    ContinueIterations = false;
-                }
-                else
-                {
-                    ContinueIterations = true;
-                    TranslationWithGravity += GetCollidingVectorComponent(TranslationWithGravity, &ClosestContact);
-                }
-            }
-        }
-        ++IterationIndex;
-
-        if (ContinueIterations)
-        {
-            collision_contact ClosestContact;
-            CheckCollisionsForEntity(GameState, Player, TranslationWithGravity, 1, &ClosestContact);
-
-            if (ClosestContact.Entity)
-            {
-                if (IsGroundContact(&ClosestContact))
-                {
-                    GroundContactThisFrame = ClosestContact;
-                    FoundGroundThisFrame = true;
-                    TranslationWithGravity = AdjustedTranslation;
-                    ContinueIterations = false;
-                }
-                else
-                {
-                    TranslationWithGravity += GetCollidingVectorComponent(TranslationWithGravity, &ClosestContact);
-                }
-            }
-        }
-        ++IterationIndex;
-
-        if (ContinueIterations)
-        {
-            collision_contact ClosestContact;
-            CheckCollisionsForEntity(GameState, Player, TranslationWithGravity, 1, &ClosestContact);
-
-            if (ClosestContact.Entity)
-            {
-                TranslationIsSafe = false;
-            }
-        }
-
-        AdjustedTranslation = TranslationWithGravity;
+        if (RequestedControls->PlayerDown) PlayerAcceleration.Y -= 1.0f;
+        if (RequestedControls->PlayerUp) PlayerAcceleration.Y += 1.0f;
     }
+    // PlayerGravityAcceleration.Y = GameState->PlayerSpecGravityValue * GameState->PlayerSpecAccelerationValue;
+    // PlayerGravityAcceleration -= GameState->PlayerSpecDragValue * GameState->PlayerGravityVelocity;
+    // vec3 PlayerGravityTranslation = (0.5f * PlayerGravityAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
+    //                                  GameState->PlayerGravityVelocity * GameInput->DeltaTime);
+    // GameState->PlayerGravityVelocity += PlayerGravityAcceleration * GameInput->DeltaTime;
+    // TODO: Better jump code
+    // if (!GameState->GravityDisabledTemp && RequestedControls->PlayerJump && GameState->PlayerOnGround)
+    // {
+    //     GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
+    // }
 
-    f32 ActualTranslationLengthThisFrame = 0;
-    if (TranslationIsSafe || IgnoreCollisions)
+    // NOTE: Drag
+    PlayerAcceleration -= GameState->PlayerSpecDragValue * GameState->PlayerVelocity;
+    
+    vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
+                              GameState->PlayerVelocity * GameInput->DeltaTime);
+
+    GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
+
+
+    // NOTE: Process entity collisions
+    vec3 PlayerCenter = Player->WorldPosition.P + Vec3(0,AdamHalfHeight,0);
+    vec3 OOEllipsoidDim = 1.0f / GameState->PlayerEllipsoidDim;
+    b32 FoundCollision = false;
+    f32 CollisionT = 1.0f;
+    for (u32 TestEntityIndex = 0;
+         TestEntityIndex < GameState->EntityCount;
+         ++TestEntityIndex)
     {
-        GameState->PlayerOnGround = FoundGroundThisFrame;
-        GameState->GroundContact = GroundContactThisFrame;
-        Player->WorldPosition.P += AdjustedTranslation;
-        ActualTranslationLengthThisFrame = VecLength(AdjustedTranslation);
+        entity *TestEntity = GameState->Entities + TestEntityIndex;
+        if (TestEntity != Player)
+        {
+            entity_type_spec *Spec = GameState->EntityTypeSpecs + TestEntity->Type;
+
+            switch (Spec->CollisionType)
+            {
+                case COLLISION_TYPE_TRIANGLE:
+                {
+                    imported_model *ImportedModel = Spec->ImportedModel;
+                    for (u32 MeshIndex = 0;
+                         MeshIndex < ImportedModel->MeshCount;
+                         ++MeshIndex)
+                    {
+                        imported_mesh *ImportedMesh = ImportedModel->Meshes + MeshIndex;
+
+                        u32 TriangleCount = ImportedMesh->IndexCount / 3;
+
+                        for (u32 TriangleIndex = 0;
+                             TriangleIndex < TriangleCount;
+                             ++TriangleIndex)
+                        {
+                            vec3 A = ImportedMesh->VertexPositions[TriangleIndex*3+0];
+                            vec3 B = ImportedMesh->VertexPositions[TriangleIndex*3+1];
+                            vec3 C = ImportedMesh->VertexPositions[TriangleIndex*3+2];
+
+                            WorldPositionPointTransform(&A, &TestEntity->WorldPosition);
+                            WorldPositionPointTransform(&B, &TestEntity->WorldPosition);
+                            WorldPositionPointTransform(&C, &TestEntity->WorldPosition);
+
+                            // NOTE: Transform triangle verts to entity ellipsoid space
+                            A = VecHadamard(A, OOEllipsoidDim);
+                            B = VecHadamard(B, OOEllipsoidDim);
+                            C = VecHadamard(C, OOEllipsoidDim);
+
+                            vec3 TriPlaneNormal = VecNormalize(VecCross(B-A, C-A));
+                            f32 TriPlaneDistance = -VecDot(TriPlaneNormal, A);
+
+                            f32 DistToPlane = VecDot(TriPlaneNormal, PlayerCenter) + TriPlaneDistance;
+                            f32 Denominator = VecDot(TriPlaneNormal, PlayerTranslation);
+                            if (AbsF(Denominator) <= FLT_EPSILON)
+                            {
+                                // NOTE: Denominator = 0, translation perpendicular to plane normal
+                                if (AbsF(DistToPlane) < 1.0f)
+                                {
+                                    // NOTE: Sphere embedded in triangles plane
+                                    // NOTE: Sweep sphere against vertices
+                                    vec3 Verts[] = { A, B, C };
+                                    for (u32 VertIndex = 0;
+                                         VertIndex < ArrayCount(Verts);
+                                         ++VertIndex)
+                                    {
+                                        f32 QuadraticA = VecLengthSq(PlayerTranslation);
+                                        f32 QuadraticB = 2.0f * VecDot(PlayerTranslation, PlayerCenter - Verts[VertIndex]);
+                                        f32 QuadraticC = VecLengthSq(Verts[VertIndex] - PlayerCenter) - 1.0f;
+
+                                        f32 IntersectionT;
+                                        b32 FoundRoot = SolveQuadraticEquation(QuadraticA, QuadraticB, QuadraticC, 1.0f, &IntersectionT);
+                                        if (FoundRoot && IntersectionT < CollisionT)
+                                        {
+                                            CollisionT = IntersectionT;
+                                            FoundCollision = true;
+                                        }
+                                    }
+
+                                    // NOTE: Sweep sphere against edges
+                                    struct temp_edge
+                                    {
+                                        vec3 P1;
+                                        vec3 P2;
+                                    } Edges[] =  { { A, B }, { B, C }, { C, A } };
+
+                                    for (u32 EdgeIndex = 0;
+                                         EdgeIndex < ArrayCount(Edges);
+                                         ++EdgeIndex)
+                                    {
+                                        temp_edge *Edge = Edges + EdgeIndex;
+
+                                        vec3 EdgeVec = Edge->P2 - Edge->P1;
+                                        vec3 BaseToVert = Edge->P1 - PlayerCenter;
+
+                                        f32 EdgeVecLengthSq = VecLengthSq(EdgeVec);
+                                        f32 DT = VecDot(EdgeVec, PlayerTranslation);
+                                        f32 DB = VecDot(EdgeVec, BaseToVert);
+                                        
+                                        f32 QuadraticA = EdgeVecLengthSq * (-VecLengthSq(PlayerTranslation)) + DT*DT;
+                                        f32 QuadraticB = EdgeVecLengthSq * 2*VecDot(PlayerTranslation, BaseToVert) - 2*DT*DB;
+                                        f32 QuadraticC = EdgeVecLengthSq * (1 - VecLengthSq(BaseToVert)) + DB*DB;
+
+                                        f32 IntersectionT;
+                                        b32 FoundRoot = SolveQuadraticEquation(QuadraticA, QuadraticB, QuadraticC, 1.0f, &IntersectionT);
+                                        if (FoundRoot && IntersectionT < CollisionT)
+                                        {
+                                            // NOTE: Check if the intersection with the line (infinite) is within the segment of the edge
+                                            f32 F0 = (DT * IntersectionT - DB) / VecLengthSq(EdgeVec);
+
+                                            if (F0 > 0 && F0 < 1)
+                                            {
+                                                CollisionT = IntersectionT;
+                                                FoundCollision = true;
+                                            }
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    // NOTE: No collision
+                                }
+                            }
+                            else
+                            {
+                                f32 T0 = (1.0f - DistToPlane) / Denominator;
+                                f32 T1 = (-1.0f - DistToPlane) / Denominator;
+
+                                if ((T0 < 0.0f || T0 > 1.0f) && (T1 < 0.0f || T1 > 1.0f))
+                                {
+                                    // NOTE: No collision
+                                    // TODO: T0 < 0.0f, T1 > 1.0f means there's a collision, doesn't it?
+                                }
+                                else
+                                {
+                                    // NOTE: Swept sphere does intersect the plane of the triangle
+                                    vec3 PlaneIntersectionPoint = PlayerCenter - TriPlaneNormal + T0 * PlayerTranslation;
+                                    b32 PointInTriangle = IsPointInTriangle(PlaneIntersectionPoint, A, B, C);
+
+                                    // TODO: T0 < 0 and 0 < T1 < 1 means it exits from a collision. Think about it
+                                    if (T0 < 0)
+                                    {
+                                        T0 = 0.0f;
+                                    }
+
+                                    if (PointInTriangle && T0 < CollisionT)
+                                    {
+                                        CollisionT = T0;
+                                        FoundCollision = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } break;
+            }
+        }
     }
-
-    CameraSetWorldPosition(&GameState->Camera, Player->WorldPosition.P + Vec3(0, GameState->PlayerEyeHeight,0));
-
-    DD_DrawQuickVector(Player->WorldPosition.P, Player->WorldPosition.P + VecNormalize(PlayerTranslation), Vec3(1));
-
-    ImmText_DrawQuickString(SimpleStringF("Actual player translation per frame: %0.16f[Safe=%d;Iter=%d;Ground=%d]",
-                                          ActualTranslationLengthThisFrame, TranslationIsSafe, IterationIndex, GameState->PlayerOnGround).D);
-
-
-    DD_DrawQuickAABox(Player->WorldPosition.P + PlayerSpec->CollisionGeometry->AABB.Center,
-                      PlayerSpec->CollisionGeometry->AABB.Extents,
-                      GameState->GravityDisabledTemp ? Vec3(0,0,1) : Vec3(0,1,0));
-
     // NOTE: Mouse picking
     vec3 CameraFront = CameraGetFront(&GameState->Camera);
     

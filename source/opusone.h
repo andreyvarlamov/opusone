@@ -61,7 +61,8 @@ struct game_state
     font_info *MajorMono;
 
     entity *PlayerEntity;
-    
+
+    vec3 PlayerEllipsoidDim;
     f32 PlayerEyeHeight;
     vec3 PlayerVelocity;
     vec3 PlayerGravityVelocity;

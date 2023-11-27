@@ -1122,3 +1122,25 @@ GetCollidingVectorComponent(vec3 V, collision_contact *Contact)
     vec3 Result = AbsF(VecDot(Contact->Normal, V)) * Contact->Normal;
     return Result;
 }
+
+void
+BarycentricCoords(vec3 P, vec3 A, vec3 B, vec3 C, f32 *U, f32 *V, f32 *W)
+{
+    // NOTE: Cramer
+    vec3 V0 = B - A;
+    vec3 V1 = C - A;
+    vec3 V2 = P - A;
+
+    f32 Dot00 = VecDot(V0, V0);
+    f32 Dot01 = VecDot(V0, V1);
+    f32 Dot11 = VecDot(V1, V1);
+    f32 Denominator = Dot00 * Dot11 - Dot01 * Dot01;
+
+    f32 Dot20 = VecDot(V2, V0);
+    f32 Dot21 = VecDot(V2, V1);
+
+    *V = (Dot20 * Dot11 - Dot01 * Dot21) / Denominator;
+    *W = (Dot00 * Dot21 - Dot20 * Dot01) / Denominator;
+    *U = 1.0f - *V - *W;
+}
+

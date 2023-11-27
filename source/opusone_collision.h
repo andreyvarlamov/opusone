@@ -12,7 +12,9 @@ enum collision_type
     COLLISION_TYPE_NONE,
     COLLISION_TYPE_AABB,
     COLLISION_TYPE_SPHERE,
-    COLLISION_TYPE_POLYHEDRON_SET
+    COLLISION_TYPE_POLYHEDRON_SET,
+    COLLISION_TYPE_TRIANGLE,
+    COLLISION_TYPE_ELLIPSOID
 };
 
 struct aabb
@@ -190,6 +192,17 @@ AreContactsSame(collision_contact *ContactA, collision_contact *ContactB)
                   ContactA->PolyhedronIndex == ContactB->PolyhedronIndex &&
                   AreVecEqual(ContactA->Normal, ContactB->Normal));
     return Result;
+}
+
+void BarycentricCoords(vec3 P, vec3 A, vec3 B, vec3 C, f32 *U, f32 *V, f32 *W);
+inline b32
+IsPointInTriangle(vec3 P, vec3 A, vec3 B, vec3 C)
+{
+    f32 U;
+    f32 V;
+    f32 W;
+    BarycentricCoords(P, A, B, C, &U, &V, &W);
+    return ((V >= 0.0f) && (W >= 0.0f) && (U >= 0.0f));
 }
 
 void

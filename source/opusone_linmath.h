@@ -288,6 +288,13 @@ VecScalarTriple(vec3 A, vec3 B, vec3 C)
     return VecDot(A, VecCross(B, C));
 }
 
+inline vec3
+VecHadamard(vec3 V0, vec3 V1)
+{
+    vec3 Result = Vec3(V0.X * V1.X, V0.Y * V1.Y, V0.Z * V1.Z);
+    return Result;
+}
+
 internal inline b32
 IsZeroVector(vec3 Vector)
 {

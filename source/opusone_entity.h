@@ -61,6 +61,12 @@ WorldPositionTransform(world_position *WorldPosition)
     return Result;
 }
 
+inline void
+WorldPositionPointTransform(vec3 *Point, world_position *WorldPosition)
+{
+    FullTransformPoint(Point, WorldPosition->P, WorldPosition->R, WorldPosition->S);
+}
+
 struct entity
 {
     entity_type Type;
