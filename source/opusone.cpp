@@ -185,23 +185,24 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     Spec->ImportedModel = Assimp_LoadModel(&GameState->AssetArena, "resources/models/collisions/Collisions.gltf");
 
                     {
-                        Spec->CollisionType = COLLISION_TYPE_POLYHEDRON_SET;
-                        Spec->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
-                        polyhedron_set *PolyhedronSet = &Spec->CollisionGeometry->PolyhedronSet;
-                        PolyhedronSet->PolyhedronCount = Spec->ImportedModel->MeshCount;
-                        PolyhedronSet->Polyhedra = MemoryArena_PushArray(&GameState->WorldArena, PolyhedronSet->PolyhedronCount, polyhedron);
+                        // Spec->CollisionType = COLLISION_TYPE_POLYHEDRON_SET;
+                        // Spec->CollisionGeometry = MemoryArena_PushStruct(&GameState->WorldArena, collision_geometry);
+                        // polyhedron_set *PolyhedronSet = &Spec->CollisionGeometry->PolyhedronSet;
+                        // PolyhedronSet->PolyhedronCount = Spec->ImportedModel->MeshCount;
+                        // PolyhedronSet->Polyhedra = MemoryArena_PushArray(&GameState->WorldArena, PolyhedronSet->PolyhedronCount, polyhedron);
                     
-                        imported_mesh *ImportedMeshCursor = Spec->ImportedModel->Meshes;
-                        polyhedron *PolyhedronCursor = PolyhedronSet->Polyhedra;
-                        for (u32 MeshIndex = 0;
-                             MeshIndex < Spec->ImportedModel->MeshCount;
-                             ++MeshIndex, ++ImportedMeshCursor, ++PolyhedronCursor)
-                        {
-                            ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
-                                                          ImportedMeshCursor->VertexPositions, ImportedMeshCursor->VertexCount,
-                                                          ImportedMeshCursor->Indices, ImportedMeshCursor->IndexCount,
-                                                          PolyhedronCursor);
-                        }
+                        // imported_mesh *ImportedMeshCursor = Spec->ImportedModel->Meshes;
+                        // polyhedron *PolyhedronCursor = PolyhedronSet->Polyhedra;
+                        // for (u32 MeshIndex = 0;
+                        //      MeshIndex < Spec->ImportedModel->MeshCount;
+                        //      ++MeshIndex, ++ImportedMeshCursor, ++PolyhedronCursor)
+                        // {
+                        //     ComputePolyhedronFromVertices(&GameState->WorldArena, &GameState->TransientArena,
+                        //                                   ImportedMeshCursor->VertexPositions, ImportedMeshCursor->VertexCount,
+                        //                                   ImportedMeshCursor->Indices, ImportedMeshCursor->IndexCount,
+                        //                                   PolyhedronCursor);
+                        // }
+                        Spec->CollisionType = COLLISION_TYPE_TRIANGLE;
                     }
                 } break;
 
@@ -576,15 +577,18 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
     // NOTE: Process entity movement
     vec3 PlayerAcceleration = {};
-    if (RequestedControls->PlayerForward) PlayerAcceleration.Z -= 1.0f;
-    if (RequestedControls->PlayerBackward) PlayerAcceleration.Z += 1.0f;
-    if (RequestedControls->PlayerLeft) PlayerAcceleration.X -= 1.0f;
-    if (RequestedControls->PlayerRight) PlayerAcceleration.X += 1.0f;
+    if (RequestedControls->PlayerForward) PlayerAcceleration.Z += 1.0f;
+    if (RequestedControls->PlayerBackward) PlayerAcceleration.Z -= 1.0f;
+    if (RequestedControls->PlayerLeft) PlayerAcceleration.X += 1.0f;
+    if (RequestedControls->PlayerRight) PlayerAcceleration.X -= 1.0f;
     // if (GameState->GravityDisabledTemp)
     {
         if (RequestedControls->PlayerDown) PlayerAcceleration.Y -= 1.0f;
         if (RequestedControls->PlayerUp) PlayerAcceleration.Y += 1.0f;
     }
+
+    PlayerAcceleration = GameState->PlayerSpecAccelerationValue * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), Player->WorldPosition.R);
+    // PlayerAcceleration *= GameState->PlayerSpecAccelerationValue;
     // PlayerGravityAcceleration.Y = GameState->PlayerSpecGravityValue * GameState->PlayerSpecAccelerationValue;
     // PlayerGravityAcceleration -= GameState->PlayerSpecDragValue * GameState->PlayerGravityVelocity;
     // vec3 PlayerGravityTranslation = (0.5f * PlayerGravityAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
@@ -610,6 +614,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     vec3 OOEllipsoidDim = 1.0f / GameState->PlayerEllipsoidDim;
     b32 FoundCollision = false;
     f32 CollisionT = 1.0f;
+    vec3 PlayerPositionES = VecHadamard(PlayerCenter, OOEllipsoidDim);
+    vec3 PlayerTranslationES = VecHadamard(PlayerTranslation, OOEllipsoidDim);
     for (u32 TestEntityIndex = 0;
          TestEntityIndex < GameState->EntityCount;
          ++TestEntityIndex)
@@ -626,6 +632,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                     imported_model *ImportedModel = Spec->ImportedModel;
                     for (u32 MeshIndex = 0;
                          MeshIndex < ImportedModel->MeshCount;
+                         // MeshIndex < 1;
                          ++MeshIndex)
                     {
                         imported_mesh *ImportedMesh = ImportedModel->Meshes + MeshIndex;
@@ -636,13 +643,41 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                              TriangleIndex < TriangleCount;
                              ++TriangleIndex)
                         {
-                            vec3 A = ImportedMesh->VertexPositions[TriangleIndex*3+0];
-                            vec3 B = ImportedMesh->VertexPositions[TriangleIndex*3+1];
-                            vec3 C = ImportedMesh->VertexPositions[TriangleIndex*3+2];
+                            vec3 A = ImportedMesh->VertexPositions[ImportedMesh->Indices[TriangleIndex*3+0]];
+                            vec3 B = ImportedMesh->VertexPositions[ImportedMesh->Indices[TriangleIndex*3+1]];
+                            vec3 C = ImportedMesh->VertexPositions[ImportedMesh->Indices[TriangleIndex*3+2]];
 
+                            if (MeshIndex == 6 && TriangleIndex == 1)
+                            {
+                                Noop;
+                            }
+                            if (MeshIndex == 2 && TriangleIndex == 7)
+                            {
+                                Noop;
+                            }
+                            if (MeshIndex == 2 && TriangleIndex == 10)
+                            {
+                                Noop;
+                            }
+                            
                             WorldPositionPointTransform(&A, &TestEntity->WorldPosition);
                             WorldPositionPointTransform(&B, &TestEntity->WorldPosition);
                             WorldPositionPointTransform(&C, &TestEntity->WorldPosition);
+
+                            if (MeshIndex == 6 && TriangleIndex == 1)
+                            {
+                                DD_DrawTriangle(&GameState->DebugDrawRenderUnit, A, B, C, Vec3(1,0,1));
+                            }
+
+                            if (MeshIndex == 2 && TriangleIndex == 7)
+                            {
+                                DD_DrawTriangle(&GameState->DebugDrawRenderUnit, A, B, C, Vec3(1,0,1));
+                            }
+
+                            if (MeshIndex == 2 && TriangleIndex == 10)
+                            {
+                                DD_DrawTriangle(&GameState->DebugDrawRenderUnit, A, B, C, Vec3(1,0,1));
+                            }
 
                             // NOTE: Transform triangle verts to entity ellipsoid space
                             A = VecHadamard(A, OOEllipsoidDim);
@@ -652,8 +687,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                             vec3 TriPlaneNormal = VecNormalize(VecCross(B-A, C-A));
                             f32 TriPlaneDistance = -VecDot(TriPlaneNormal, A);
 
-                            f32 DistToPlane = VecDot(TriPlaneNormal, PlayerCenter) + TriPlaneDistance;
-                            f32 Denominator = VecDot(TriPlaneNormal, PlayerTranslation);
+                            f32 DistToPlane = VecDot(TriPlaneNormal, PlayerPositionES) + TriPlaneDistance;
+                            f32 Denominator = VecDot(TriPlaneNormal, PlayerTranslationES);
                             if (AbsF(Denominator) <= FLT_EPSILON)
                             {
                                 // NOTE: Denominator = 0, translation perpendicular to plane normal
@@ -666,9 +701,9 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                          VertIndex < ArrayCount(Verts);
                                          ++VertIndex)
                                     {
-                                        f32 QuadraticA = VecLengthSq(PlayerTranslation);
-                                        f32 QuadraticB = 2.0f * VecDot(PlayerTranslation, PlayerCenter - Verts[VertIndex]);
-                                        f32 QuadraticC = VecLengthSq(Verts[VertIndex] - PlayerCenter) - 1.0f;
+                                        f32 QuadraticA = VecLengthSq(PlayerTranslationES);
+                                        f32 QuadraticB = 2.0f * VecDot(PlayerTranslationES, PlayerPositionES - Verts[VertIndex]);
+                                        f32 QuadraticC = VecLengthSq(Verts[VertIndex] - PlayerPositionES) - 1.0f;
 
                                         f32 IntersectionT;
                                         b32 FoundRoot = SolveQuadraticEquation(QuadraticA, QuadraticB, QuadraticC, 1.0f, &IntersectionT);
@@ -693,14 +728,14 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                         temp_edge *Edge = Edges + EdgeIndex;
 
                                         vec3 EdgeVec = Edge->P2 - Edge->P1;
-                                        vec3 BaseToVert = Edge->P1 - PlayerCenter;
+                                        vec3 BaseToVert = Edge->P1 - PlayerPositionES;
 
                                         f32 EdgeVecLengthSq = VecLengthSq(EdgeVec);
-                                        f32 DT = VecDot(EdgeVec, PlayerTranslation);
+                                        f32 DT = VecDot(EdgeVec, PlayerTranslationES);
                                         f32 DB = VecDot(EdgeVec, BaseToVert);
                                         
-                                        f32 QuadraticA = EdgeVecLengthSq * (-VecLengthSq(PlayerTranslation)) + DT*DT;
-                                        f32 QuadraticB = EdgeVecLengthSq * 2*VecDot(PlayerTranslation, BaseToVert) - 2*DT*DB;
+                                        f32 QuadraticA = EdgeVecLengthSq * (-VecLengthSq(PlayerTranslationES)) + DT*DT;
+                                        f32 QuadraticB = EdgeVecLengthSq * 2*VecDot(PlayerTranslationES, BaseToVert) - 2*DT*DB;
                                         f32 QuadraticC = EdgeVecLengthSq * (1 - VecLengthSq(BaseToVert)) + DB*DB;
 
                                         f32 IntersectionT;
@@ -728,27 +763,40 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                 f32 T0 = (1.0f - DistToPlane) / Denominator;
                                 f32 T1 = (-1.0f - DistToPlane) / Denominator;
 
+                                if (!(T0 < 0.0f || T0 > 1.0f))
+                                {
+                                    Noop;
+                                }
+                                
                                 if ((T0 < 0.0f || T0 > 1.0f) && (T1 < 0.0f || T1 > 1.0f))
                                 {
                                     // NOTE: No collision
                                     // TODO: T0 < 0.0f, T1 > 1.0f means there's a collision, doesn't it?
+                                    Noop;
                                 }
                                 else
                                 {
                                     // NOTE: Swept sphere does intersect the plane of the triangle
-                                    vec3 PlaneIntersectionPoint = PlayerCenter - TriPlaneNormal + T0 * PlayerTranslation;
+                                    vec3 PlaneIntersectionPoint = PlayerPositionES - TriPlaneNormal + T0 * PlayerTranslationES;
                                     b32 PointInTriangle = IsPointInTriangle(PlaneIntersectionPoint, A, B, C);
 
-                                    // TODO: T0 < 0 and 0 < T1 < 1 means it exits from a collision. Think about it
-                                    if (T0 < 0)
+                                    if (PointInTriangle)
                                     {
-                                        T0 = 0.0f;
-                                    }
+                                        // TODO: T0 < 0 and 0 < T1 < 1 means it exits from a collision. Think about it
+                                        if (T0 < 0)
+                                        {
+                                            T0 = 0.0f;
+                                        }
 
-                                    if (PointInTriangle && T0 < CollisionT)
+                                        if (PointInTriangle && T0 < CollisionT)
+                                        {
+                                            CollisionT = T0;
+                                            FoundCollision = true;
+                                        }
+                                    }
+                                    else
                                     {
-                                        CollisionT = T0;
-                                        FoundCollision = true;
+                                        // TODO: Still sweep against vertices and edges
                                     }
                                 }
                             }
@@ -758,6 +806,15 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
             }
         }
     }
+
+    ImmText_DrawQuickString(SimpleStringF("FoundCollision: %d", FoundCollision).D);
+    if (!FoundCollision)
+    {
+        Player->WorldPosition.P += PlayerTranslation;
+    }
+    
+    CameraSetWorldPosition(&GameState->Camera, Player->WorldPosition.P + Vec3(0, GameState->PlayerEyeHeight,0));
+    
     // NOTE: Mouse picking
     vec3 CameraFront = CameraGetFront(&GameState->Camera);
     
