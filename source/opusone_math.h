@@ -71,7 +71,7 @@ ClampF(f32 Value, f32 Min, f32 Max)
 }
 
 inline b32
-SolveQuadraticEquation(f32 A, f32 B, f32 C, f32 MaxRoot, f32 *Out_Root)
+SolveQuadraticEquation(f32 A, f32 B, f32 C, f32 *Out_X1, f32 *Out_X2)
 {
     f32 Determinant = B*B - 4.0f*A*C;
 
@@ -85,26 +85,18 @@ SolveQuadraticEquation(f32 A, f32 B, f32 C, f32 MaxRoot, f32 *Out_Root)
     f32 X2 = (-B + SqrtD) / (2.0f * A);
 
     // Sort so X1 is smaller
-    if (X1 > X2)
+    if (X1 < X2)
     {
-        f32 Temp = X2;
-        X2 = X1;
-        X1 = Temp;
+        *Out_X1 = X1;
+        *Out_X2 = X2;
+    }
+    else
+    {
+        *Out_X1 = X2;
+        *Out_X2 = X1;
     }
 
-    if (X1 > 0 && X1 < MaxRoot)
-    {
-        *Out_Root = X1;
-        return true;
-    }
-
-    if (X2 > 0 && X2 < MaxRoot)
-    {
-        *Out_Root = X2;
-        return true;
-    }
-
-    return false;
+    return true;
 }
 
 #endif

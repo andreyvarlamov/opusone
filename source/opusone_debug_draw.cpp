@@ -76,6 +76,140 @@ DD_DrawAABox(render_unit *RenderUnit, vec3 Position, vec3 Extents, vec3 Color)
 }
 
 void
+DD_DrawEllipsoid(render_unit *RenderUnit, vec3 Position, f32 XRadius, f32 YRadius, u32 RingCount, u32 SectorCount, vec3 Color, memory_arena *TransientArena)
+{
+    Assert(RingCount > 2);
+    Assert(SectorCount > 2);
+
+    u32 VertexCount = 2 + (RingCount - 2) * SectorCount;
+    u32 IndexCount = (RingCount - 2) * SectorCount * 6;
+    
+    vec3 *Vertices = MemoryArena_PushArray(TransientArena, VertexCount, vec3);
+    vec3 *Normals = MemoryArena_PushArray(TransientArena, VertexCount, vec3);
+    vec4 *Colors = MemoryArena_PushArray(TransientArena, VertexCount, vec4);
+
+    vec4 ColorV4 = Vec4(Color, 1.0f);
+
+    u32 VertexIndex = 0;
+
+    for (u32 RingIndex = 0; RingIndex < RingCount; ++RingIndex)
+    {
+        if (RingIndex == 0)
+        {
+            // At RingIndex = 0 -> VerticalAngle = PI/2 -> cos = 0 -> 0 radius ring -> north pole
+            Vertices[VertexIndex] = vec3 { 0.0f, YRadius, 0.0f } + Position;
+            Normals[VertexIndex] = vec3 { 0.0f, 1.0f, 0.0f };
+            Colors[VertexIndex] = ColorV4;
+            VertexIndex++;
+        }
+        else if (RingIndex == (RingCount - 1))
+        {
+            // At RingIndex = RingCount - 1 -> VerticalAngle = -PI/2 -> cos = 0; 0 radius ring -> south pole
+            Vertices[VertexIndex] = vec3 { 0.0f, -YRadius, 0.0f } + Position;
+            Normals[VertexIndex] = vec3 { 0.0f, -1.0f, 0.0f };
+            Colors[VertexIndex] = ColorV4;
+            VertexIndex++;
+        }
+        else
+        {
+            f32 RingRatio = ((f32) RingIndex / (f32) (RingCount - 1));
+
+            f32 VerticalAngle = (PI32 / 2.0f - (PI32 * RingRatio)); // PI/2 -> -PI/2 Range
+            f32 RingRadius = XRadius * CosF(VerticalAngle);
+            f32 Y = YRadius * SinF(VerticalAngle); // Radius -> -Radius range
+
+            for (u32 SectorIndex = 0; SectorIndex < SectorCount; ++SectorIndex)
+            {
+                f32 SectorRatio = (f32) SectorIndex / (f32) SectorCount;
+                f32 Theta = 2.0f * PI32 * SectorRatio;
+                f32 X = RingRadius * SinF(Theta);
+                f32 Z = RingRadius * CosF(Theta);
+
+                vec3 VertPosition = vec3 { X, Y, Z };
+                Vertices[VertexIndex] = VertPosition + Position;  // Add the position of the sphere origin
+                Normals[VertexIndex] = VecNormalize(VertPosition);
+                Colors[VertexIndex] = ColorV4;
+                VertexIndex++;
+            }
+        }
+    }
+    Assert(VertexIndex == VertexCount);
+
+    i32 *Indices = MemoryArena_PushArray(TransientArena, IndexCount, i32);
+
+    u32 IndexIndex = 0;
+
+    for (u32 RingIndex = 0; RingIndex < RingCount - 1; ++RingIndex)
+    {
+        for (u32 SectorIndex = 0; SectorIndex < SectorCount; ++SectorIndex)
+        {
+            i32 NextSectorIndex = ((SectorIndex == (SectorCount - 1)) ?
+                                   (0) :
+                                   ((i32) SectorIndex + 1));
+
+            if (RingIndex == 0)
+            {
+                // Sectors are triangles, add 3 indices
+
+                i32 CurrentRingSector0 = 0;
+                i32 NextRingSector0 = 1;
+
+                Indices[IndexIndex++] = CurrentRingSector0;
+                Indices[IndexIndex++] = NextRingSector0 + (i32) SectorIndex;
+                Indices[IndexIndex++] = NextRingSector0 + NextSectorIndex;
+            }
+            else
+            {
+                i32 CurrentRingSector0 = 1 + ((i32) RingIndex - 1) * (i32) SectorCount;
+                i32 NextRingSector0 = 1 + (i32) RingIndex * (i32) SectorCount;
+
+                if (RingIndex == (RingCount - 2))
+                {
+                    // Sectors are triangles, add 3 indices
+
+                    Indices[IndexIndex++] = CurrentRingSector0 + (i32) SectorIndex;
+                    Indices[IndexIndex++] = NextRingSector0;
+                    Indices[IndexIndex++] = CurrentRingSector0 + NextSectorIndex;
+                }
+                else
+                {
+                    // Sectors are quads, add 6 indices
+
+                    Indices[IndexIndex++] = CurrentRingSector0 + (i32) SectorIndex;
+                    Indices[IndexIndex++] = NextRingSector0 + (i32) SectorIndex;
+                    Indices[IndexIndex++] = NextRingSector0 + NextSectorIndex;
+
+                    Indices[IndexIndex++] = CurrentRingSector0 + (i32) SectorIndex;
+                    Indices[IndexIndex++] = NextRingSector0 + NextSectorIndex;
+                    Indices[IndexIndex++] = CurrentRingSector0 + NextSectorIndex;
+                }
+            }
+        }
+    }
+    Assert(IndexIndex == IndexCount);
+
+    render_marker *Marker = RenderUnit->Markers + (RenderUnit->MarkerCount++);
+    Assert(RenderUnit->MarkerCount <= RenderUnit->MaxMarkerCount);
+    *Marker = {};
+    Marker->StateT = RENDER_STATE_DEBUG;
+    Marker->BaseVertexIndex = RenderUnit->VertexCount;
+    Marker->StartingIndex = RenderUnit->IndexCount;
+    Marker->IndexCount = IndexCount;
+    Marker->StateD.Debug.IsPointMode = true;
+    Marker->StateD.Debug.PointSize = 3.0f;
+
+    void *AttribData[16] = {};
+    u32 AttribCount = 0;
+    AttribData[AttribCount++] = Vertices;
+    AttribData[AttribCount++] = Normals;
+    AttribData[AttribCount++] = Colors;
+    Assert(AttribCount <= ArrayCount(AttribData));
+
+    SubVertexDataForRenderUnit(RenderUnit, AttribData, AttribCount, Indices, VertexCount, IndexCount);
+}
+
+
+void
 DD_DrawVector(render_unit *RenderUnit, vec3 A, vec3 B, vec3 AColor, vec3 BColor, f32 LineWidth)
 {
     vec3 Vertices[] = { A, B };
