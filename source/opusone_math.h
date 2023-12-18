@@ -71,7 +71,7 @@ ClampF(f32 Value, f32 Min, f32 Max)
 }
 
 inline b32
-SolveQuadraticEquation(f32 A, f32 B, f32 C, f32 *Out_X1, f32 *Out_X2)
+SolveQuadraticEquation(f32 A, f32 B, f32 C, f32 *Out_Root1, f32 *Out_Root2)
 {
     f32 Determinant = B*B - 4.0f*A*C;
 
@@ -85,18 +85,46 @@ SolveQuadraticEquation(f32 A, f32 B, f32 C, f32 *Out_X1, f32 *Out_X2)
     f32 X2 = (-B + SqrtD) / (2.0f * A);
 
     // Sort so X1 is smaller
-    if (X1 < X2)
+    if (Root1 < Root2)
     {
-        *Out_X1 = X1;
-        *Out_X2 = X2;
+        *Out_Root1 = Root1;
+        *Out_Root2 = Root2;
     }
     else
     {
-        *Out_X1 = X2;
-        *Out_X2 = X1;
+        *Out_Root1 = Root2;
+        *Out_Root2 = Root1;
     }
 
     return true;
+}
+
+inline b32
+GetLowestQuadraticRoot(f32 A, f32 B, f32 C, f32 MaxRoot, f32 *Out_Root)
+{
+    f32 Root1, Root2;
+    if(SolveQuadraticEquation(A, B, C, &Root1, &Root2))
+    {
+        if (Root1 > 0 && Root1 < MaxRoot)
+        {
+            *Root = Root1;
+            return true;
+        }
+
+        // NOTE: It is possible that we want Root2, this can happen if Root1 < 0
+        if (Root2 > 0 && Root2 < MaxRoot)
+        {
+            *Root = Root2;
+            return true;
+        }
+
+        // NOTE: No valid solutions
+        return false;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 #endif

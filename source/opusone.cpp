@@ -617,9 +617,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     b32 FoundCollision = false;
     f32 CollisionT = 1.0f;
     
-    vec3 PlayerPositionES = VecHadamard(PlayerCenter, OOEllipsoidDim);
-    vec3 PlayerTranslationES = VecHadamard(PlayerTranslation, OOEllipsoidDim);
-
     b32 IsMoving = VecLengthSq(PlayerTranslation) > FLT_EPSILON;
     b32 IntersectsPlaneOfTriangle = false;
     b32 IntersectsInsideTriangle = false;
@@ -700,15 +697,15 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 #endif
 
                                 // NOTE: Transform triangle verts to entity ellipsoid space
-                                A = VecHadamard(A, OOEllipsoidDim);
-                                B = VecHadamard(B, OOEllipsoidDim);
-                                C = VecHadamard(C, OOEllipsoidDim);
+                                vec3 eA = VecHadamard(A, EntityOOEllipDim);
+                                vec3 eB = VecHadamard(B, EntityOOEllipDim);
+                                vec3 eC = VecHadamard(C, EntityOOEllipDim);
+                                vec3 ePlayerP = VecHadamard(PlayerCenter, OOEllipsoidDim);
+                                vec3 ePlayerDeltaP = VecHadamard(PlayerTranslation, OOEllipsoidDim);
 
-                                vec3 TriPlaneNormal = VecNormalize(VecCross(B-A, C-A));
-                                f32 TriPlaneDistance = -VecDot(TriPlaneNormal, A);
+                                EllipsoidTriangleCollide(ePlayerP, ePlayerDP, eA, eB, eC);
 
-                                f32 DistToPlane = VecDot(TriPlaneNormal, PlayerPositionES) + TriPlaneDistance;
-                                f32 Denominator = VecDot(TriPlaneNormal, PlayerTranslationES);
+
 
                                 b32 TranslationIsParallelToPlane = AbsF(Denominator) <= FLT_EPSILON;
 
@@ -716,6 +713,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
                                 {
                                     f32 T0 = (1.0f - DistToPlane) / Denominator;
                                     f32 T1 = (-1.0f - DistToPlane) / Denominator;
+
+                                    if ((T0 < 0 || T0 > 1) && (T1 < 0 || T1 > 1))
 
                                     if ((T0 < 0 && T1 < 0) || (T0 > 1 && T1 > 1))
                                     {

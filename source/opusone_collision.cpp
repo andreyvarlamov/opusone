@@ -1144,3 +1144,98 @@ BarycentricCoords(vec3 P, vec3 A, vec3 B, vec3 C, f32 *U, f32 *V, f32 *W)
     *U = 1.0f - *V - *W;
 }
 
+b32
+EntityTriangleCollide(vec3 EntityP, vec3 EntityDeltaP, vec3 A, vec3 B, vec3 C, f32 *Out_TimeOfImpact, vec3 *Out_CollisionPoint)
+{
+
+    vec3 PlaneN = VecNormalize(VecCross(B - A, C - A));
+    f32 PlaneD = -VecDot(PlaneN, A);
+
+    // NOTE: Only check if the triangle is front-facing to the EntityDeltaP vector
+    if (VecDot(EntityDeltaP, PlaneN) > FLT_EPSILON)
+    {
+        return false;
+    }
+
+    f32 T0, T1;
+
+    f32 Dist = VecDot(PlaneN, EntityP) + PlaneD;
+    f32 NDotDeltaP = VecDot(PlaneN, EntityDeltaP);
+
+    b32 DeltaPParallel = (AbsF(NDotDeltaP) <= FLT_EPSILON);
+
+    if (!DeltaPParallel)
+    {
+        T0 = (1 - Dist) / NDotDeltaP;
+        T1 = (-1 - Dist) / NDotDeltaP;
+
+        // Swap so T0 < T1
+        if (T0 > T1)
+        {
+            f32 Temp = T1;
+            T1 = T0;
+            T0 = Temp;
+        }
+
+        // Check that at least one result is within range
+        if (T0 > 1 || T1 < 0)
+        {
+            // Both t values are outside [0,1]
+            // No collision possible
+            return false;
+        }
+
+        // Clamp to [0, 1]
+        if (T0 < 0) T0 = 0;
+        if (T1 < 0) T1 = 0;
+        if (T0 > 1) T0 = 1;
+        if (T1 > 1) T1 = 1;
+
+        vec3 PlaneIntersectionPoint = EntityP - PlaneN + T0 * EntityDeltaP;
+        if (IsPointInTriangle(PlaneIntersectionPoint, A, B, C))
+        {
+            // NOTE: Plane intersection point is within triangle, that point has to be the time of impact
+            *Out_TimeOfImpact = T0;
+            *Out_CollisionPoint = PlaneIntersectionPoint;
+            return true;
+        }
+    }
+    else // if DeltaPParallel
+    {
+        // NOTE: Entity moving in parallel with the plane of the triangle
+        // No collision if distance to plane is > 1
+        if (AbsF(DistToPlane) > 1)
+        {
+            return false;
+        }
+
+        // NOTE: Entity embedded in the plane, intersects in the whole range [0,1]
+        T0 = 0;
+        T1 = 1;
+    }
+
+    f32 TimeOfImpact = T0;
+    b32 FoundCollision = false;
+    
+    // NOTE: Sweep against vertices
+    vec3 Verts[] = { A, B, C };
+    for (u32 VertI = 0;
+         VertI < ArrayCount(Verts);
+         ++VertI)
+    {
+        vec3 *V = Verts + VertIndex;
+        
+        f32 QuadraticA = VecLengthSq(EntityDeltaP);
+        f32 QuadraticB = 2 * VecDot(EntityDeltaP, EntityP - *V);
+        f32 QuadraticC = VecLengthSq(*V - EntityP) - 1;
+
+        f32 NewT;
+        if (GetLowestQuadraticEquation(QuadraticA, QuadraticB, QuadraticC, TimeOfImpact, &NewT))
+        {
+            TimeOfImpact = NewT;
+            
+        }
+    }
+
+    // NOTE: Sweep against edges
+}

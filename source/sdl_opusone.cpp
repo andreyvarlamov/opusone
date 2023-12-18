@@ -61,7 +61,7 @@ main(int Argc, char *Argv[])
     f32 ExpectedRefreshRates[] = { 60.0f, 164.386f, 30.0f }; // Hardcode from my display settings for now
     u32 ExpectedRefreshRateCount = ArrayCount(ExpectedRefreshRates);
     
-    u32 CurrentExpectedRefreshRate = 0;
+    u32 CurrentExpectedRefreshRate = 1;
     GameInput->DeltaTime = 1.0f / ExpectedRefreshRates[CurrentExpectedRefreshRate];
     printf("PLATFORM: Expected refresh rate: %0.3f fps [DT=%0.6f]\n",
            ExpectedRefreshRates[CurrentExpectedRefreshRate], GameInput->DeltaTime);

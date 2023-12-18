@@ -239,4 +239,7 @@ CheckCollisionsForEntity(game_state *GameState, entity *Entity, vec3 EntityTrans
 vec3
 GetCollidingVectorComponent(vec3 V, collision_contact *Contact);
 
+b32
+EllipsoidTriangleCollide(vec3 OOEllipsoidDim, vec3 A, vec3 B, vec3 C);
+
 #endif
