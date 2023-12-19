@@ -81,4 +81,9 @@ struct game_state;
 entity *AddEntity(game_state *GameState,
                   entity_type EntityType, vec3 Position, quat Rotation, vec3 Scale, b32 IsInvisible = false);
 
+void
+EntityIntegrateAndMove(entity *MovingEntity, vec3 EntityEllipsoidDim, vec3 EntityAcc, vec3 *EntityVel,
+                       f32 AccValue, f32 DragValue, f32 DeltaTime, b32 IgnoreCollisions,
+                       entity *TestEntities);
+
 #endif

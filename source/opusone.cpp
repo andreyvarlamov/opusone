@@ -463,8 +463,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         GameState->GroundContact = CollisionContact(); GameState->GroundContact.Normal = Vec3(0,1,0);
         GameState->PlayerEllipsoidDim = Vec3(0.3f, AdamHalfHeight, 0.3f);
     }
-
-    ImmText_DrawQuickString(SimpleStringF("Iteration To Debug: %d/%d", GameState->IterationToDebug, COLLISION_ITERATIONS + 1).D);
     
     //
     // NOTE: Process controls
@@ -571,7 +569,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         Player->WorldPosition.R = CameraGetYawQuat(&GameState->Camera);
     }
 
-
     // NOTE: Entity AI updates
     // ....
 
@@ -587,326 +584,27 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         if (RequestedControls->PlayerUp) PlayerAcceleration.Y += 1.0f;
     }
 
-    PlayerAcceleration = GameState->PlayerSpecAccelerationValue * RotateVecByQuatSlow(VecNormalize(PlayerAcceleration), Player->WorldPosition.R);
-    // PlayerAcceleration *= GameState->PlayerSpecAccelerationValue;
-    // PlayerGravityAcceleration.Y = GameState->PlayerSpecGravityValue * GameState->PlayerSpecAccelerationValue;
-    // PlayerGravityAcceleration -= GameState->PlayerSpecDragValue * GameState->PlayerGravityVelocity;
-    // vec3 PlayerGravityTranslation = (0.5f * PlayerGravityAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
-    //                                  GameState->PlayerGravityVelocity * GameInput->DeltaTime);
-    // GameState->PlayerGravityVelocity += PlayerGravityAcceleration * GameInput->DeltaTime;
-    // TODO: Better jump code
-    // if (!GameState->GravityDisabledTemp && RequestedControls->PlayerJump && GameState->PlayerOnGround)
-    // {
-    //     GameState->PlayerVelocity.Y += GameState->PlayerSpecJumpVelocity;
-    // }
-
-    // NOTE: Drag
-    PlayerAcceleration -= GameState->PlayerSpecDragValue * GameState->PlayerVelocity;
+    DD_DrawEllipsoid(&GameState->DebugDrawRenderUnit, Player->WorldPosition.P + Vec3(0,GameState->PlayerEllipsoidDim.Y,0),
+                     GameState->PlayerEllipsoidDim.X, GameState->PlayerEllipsoidDim.Y,
+                     9, 11, Vec3(0,1,0), &GameState->TransientArena);
     
-    vec3 PlayerTranslation = (0.5f * PlayerAcceleration * GameInput->DeltaTime * GameInput->DeltaTime +
-                              GameState->PlayerVelocity * GameInput->DeltaTime);
-
-    GameState->PlayerVelocity += PlayerAcceleration * GameInput->DeltaTime;
-
-
-    // NOTE: Process entity collisions
-    vec3 PlayerCenter = Player->WorldPosition.P + Vec3(0,AdamHalfHeight,0);
-    
-    vec3 OOEllipsoidDim = 1.0f / GameState->PlayerEllipsoidDim;
-    DD_DrawEllipsoid(&GameState->DebugDrawRenderUnit, PlayerCenter, GameState->PlayerEllipsoidDim.X, GameState->PlayerEllipsoidDim.Y, 9, 11, Vec3(0,1,0), &GameState->TransientArena);
-    b32 FoundCollision = false;
-    f32 CollisionT = 1.0f;
-    
-    b32 IsMoving = VecLengthSq(PlayerTranslation) > FLT_EPSILON;
-    b32 IntersectsPlaneOfTriangle = false;
-    b32 IntersectsInsideTriangle = false;
-
     vec3 A = Vec3(-5,0.2f,100);
     vec3 B = Vec3(-5,15,100);
     vec3 C = Vec3(-15,0.2f,90);
     DD_DrawTriangle(&GameState->DebugDrawRenderUnit, A, B, C, Vec3(1,0,1));
 
-    if (!IgnoreCollisions && IsMoving)
-    {
-        for (u32 TestEntityIndex = 0;
-             // TestEntityIndex < GameState->EntityCount;
-             TestEntityIndex < 1;
-             ++TestEntityIndex)
-        {
-            entity *TestEntity = GameState->Entities + TestEntityIndex;
-            if (TestEntity != Player)
-            {
-                entity_type_spec *Spec = GameState->EntityTypeSpecs + TestEntity->Type;
+    EntityIntegrateAndMove(Player, GameState->PlayerEllipsoidDim, PlayerAcceleration, &GameState->PlayerVelocity,
+                           GameState->PlayerSpecAccelerationValue, GameState->PlayerSpecDragValue, GameInput->DeltaTime, IgnoreCollisions,
+                           GameState->Entities);
 
-                switch (Spec->CollisionType)
-                {
-                    case COLLISION_TYPE_TRIANGLE:
-                    default:
-                    {
-                        imported_model *ImportedModel = Spec->ImportedModel;
-                        for (u32 MeshIndex = 0;
-                             // MeshIndex < ImportedModel->MeshCount;
-                             MeshIndex < 1;
-                             ++MeshIndex)
-                        {
-                            imported_mesh *ImportedMesh = ImportedModel->Meshes + MeshIndex;
-
-                            u32 TriangleCount = ImportedMesh->IndexCount / 3;
-
-                            for (u32 TriangleIndex = 0;
-                                 // TriangleIndex < TriangleCount;
-                                 TriangleIndex < 1;
-                                 ++TriangleIndex)
-                            {
-#if 0
-                                vec3 A = ImportedMesh->VertexPositions[ImportedMesh->Indices[TriangleIndex*3+0]];
-                                vec3 B = ImportedMesh->VertexPositions[ImportedMesh->Indices[TriangleIndex*3+1]];
-                                vec3 C = ImportedMesh->VertexPositions[ImportedMesh->Indices[TriangleIndex*3+2]];
-
-                                if (MeshIndex == 6 && TriangleIndex == 1)
-                                {
-                                    Noop;
-                                }
-                                if (MeshIndex == 2 && TriangleIndex == 7)
-                                {
-                                    Noop;
-                                }
-                                if (MeshIndex == 2 && TriangleIndex == 10)
-                                {
-                                    Noop;
-                                }
-                            
-                                WorldPositionPointTransform(&A, &TestEntity->WorldPosition);
-                                WorldPositionPointTransform(&B, &TestEntity->WorldPosition);
-                                WorldPositionPointTransform(&C, &TestEntity->WorldPosition);
-
-                                if (MeshIndex == 6 && TriangleIndex == 1)
-                                {
-                                    DD_DrawTriangle(&GameState->DebugDrawRenderUnit, A, B, C, Vec3(1,0,1));
-                                }
-
-                                if (MeshIndex == 2 && TriangleIndex == 7)
-                                {
-                                    DD_DrawTriangle(&GameState->DebugDrawRenderUnit, A, B, C, Vec3(1,0,1));
-                                }
-
-                                if (MeshIndex == 2 && TriangleIndex == 10)
-                                {
-                                    DD_DrawTriangle(&GameState->DebugDrawRenderUnit, A, B, C, Vec3(1,0,1));
-                                }
-#endif
-
-                                // NOTE: Transform triangle verts to entity ellipsoid space
-                                vec3 eA = VecHadamard(A, EntityOOEllipDim);
-                                vec3 eB = VecHadamard(B, EntityOOEllipDim);
-                                vec3 eC = VecHadamard(C, EntityOOEllipDim);
-                                vec3 ePlayerP = VecHadamard(PlayerCenter, OOEllipsoidDim);
-                                vec3 ePlayerDeltaP = VecHadamard(PlayerTranslation, OOEllipsoidDim);
-
-                                EllipsoidTriangleCollide(ePlayerP, ePlayerDP, eA, eB, eC);
-
-
-
-                                b32 TranslationIsParallelToPlane = AbsF(Denominator) <= FLT_EPSILON;
-
-                                if (!TranslationIsParallelToPlane)
-                                {
-                                    f32 T0 = (1.0f - DistToPlane) / Denominator;
-                                    f32 T1 = (-1.0f - DistToPlane) / Denominator;
-
-                                    if ((T0 < 0 || T0 > 1) && (T1 < 0 || T1 > 1))
-
-                                    if ((T0 < 0 && T1 < 0) || (T0 > 1 && T1 > 1))
-                                    {
-                                        // NOTE: No collision
-                                        Noop;
-                                    }
-                                    else
-                                    {
-                                        // NOTE: There is a collision or intersection with the plane of the triangle
-                                        IntersectsPlaneOfTriangle = true;
-                                        vec3 PlaneIntersectionPoint = PlayerPositionES - TriPlaneNormal + T0 * PlayerTranslationES;
-                                        b32 PointInTriangle = IsPointInTriangle(PlaneIntersectionPoint, A, B, C);
-
-                                        if (PointInTriangle)
-                                        {
-                                            if (T0 < 0) T0 = 0.0f;
-
-                                            IntersectsInsideTriangle = true;
-
-                                            if (PointInTriangle && T0 < CollisionT)
-                                            {
-                                                CollisionT = T0;
-                                                FoundCollision = true;
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (TranslationIsParallelToPlane || (IntersectsPlaneOfTriangle && !IntersectsInsideTriangle))
-                                {
-                                    if (!TranslationIsParallelToPlane || AbsF(DistToPlane) < 1.0f)
-                                    {
-                                        // NOTE: Sweep sphere against vertices
-                                        vec3 Verts[] = { A, B, C };
-                                        for (u32 VertIndex = 0;
-                                             VertIndex < ArrayCount(Verts);
-                                             ++VertIndex)
-                                        {
-                                            f32 QuadraticA = VecLengthSq(PlayerTranslationES);
-                                            f32 QuadraticB = 2.0f * VecDot(PlayerTranslationES, PlayerPositionES - Verts[VertIndex]);
-                                            f32 QuadraticC = VecLengthSq(Verts[VertIndex] - PlayerPositionES) - 1.0f;
-
-                                            f32 T0, T1;
-                                            b32 FoundRoot = SolveQuadraticEquation(QuadraticA, QuadraticB, QuadraticC, &T0, &T1);
-                                            
-                                            if (FoundRoot)
-                                            {
-                                                if ((T0 < 0 && T1 < 0) || (T0 > 1 && T1 > 1))
-                                                {
-                                                    // NOTE: No collision
-                                                    Noop;
-                                                }
-                                                else
-                                                {
-                                                    if (T0 < 0) T0 = 0;
-                                                    if (T0 < CollisionT)
-                                                    {
-                                                        CollisionT = T0;
-                                                        FoundCollision = true;
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // NOTE: Sweep sphere against edges
-                                        struct temp_edge
-                                        {
-                                            vec3 P1;
-                                            vec3 P2;
-                                        } Edges[] =  { { A, B }, { B, C }, { C, A } };
-
-                                        for (u32 EdgeIndex = 0;
-                                             EdgeIndex < ArrayCount(Edges);
-                                             ++EdgeIndex)
-                                        {
-                                            temp_edge *Edge = Edges + EdgeIndex;
-
-                                            vec3 EdgeVec = Edge->P2 - Edge->P1;
-                                            vec3 BaseToVert = Edge->P1 - PlayerPositionES;
-
-                                            f32 EdgeVecLengthSq = VecLengthSq(EdgeVec);
-                                            f32 DT = VecDot(EdgeVec, PlayerTranslationES);
-                                            f32 DB = VecDot(EdgeVec, BaseToVert);
-                                        
-                                            f32 QuadraticA = EdgeVecLengthSq * (-VecLengthSq(PlayerTranslationES)) + DT*DT;
-                                            f32 QuadraticB = EdgeVecLengthSq * 2*VecDot(PlayerTranslationES, BaseToVert) - 2*DT*DB;
-                                            f32 QuadraticC = EdgeVecLengthSq * (1 - VecLengthSq(BaseToVert)) + DB*DB;
-
-                                            f32 T0, T1;
-                                            b32 FoundRoot = SolveQuadraticEquation(QuadraticA, QuadraticB, QuadraticC, &T0, &T1);
-                                            if (FoundRoot)
-                                            {
-                                                if ((T0 < 0 && T1 < 0) || (T0 > 1 && T1 > 1))
-                                                {
-                                                    // NOTE: No collision
-                                                    Noop;
-                                                }
-                                                else
-                                                {
-                                                    // NOTE: Check if the intersection with the line (infinite) is within the segment of the edge
-                                                    f32 IntersectionPoint = (DT * T0 - DB) / VecLengthSq(EdgeVec);
-                                                    
-                                                    if (IntersectionPoint > 0 && IntersectionPoint < 1)
-                                                    {
-                                                        if (T0 < 0) T0 = 0;
-                                                        if (T0 < CollisionT)
-                                                        {
-                                                            CollisionT = T0;
-                                                            FoundCollision = true;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        // NOTE: No collision
-                                    }
-                                }
-                            }
-                        }
-                    } break; // COLLISION_TYPE_TRIANGLE
-                }
-            }
-        } // for TestEntity loop
-    } // if (!IgnoreCollisions)
-
-    ImmText_DrawQuickString(SimpleStringF("IsMoving: %d", IsMoving).D);
-    ImmText_DrawQuickString(SimpleStringF("IntersectsPlaneOfTriangle: %d", IntersectsPlaneOfTriangle).D);
-    ImmText_DrawQuickString(SimpleStringF("IntersectsInsideTriangle: %d", IntersectsInsideTriangle).D);
-    ImmText_DrawQuickString(SimpleStringF("FoundCollision: %d", FoundCollision).D);
-    if (!FoundCollision)
-    {
-        Player->WorldPosition.P += PlayerTranslation;
-    }
-    
     CameraSetWorldPosition(&GameState->Camera, Player->WorldPosition.P + Vec3(0, GameState->PlayerEyeHeight,0));
     
-    // NOTE: Mouse picking
-    vec3 CameraFront = CameraGetFront(&GameState->Camera);
-    
-    vec3 RayPosition = Player->WorldPosition.P + Vec3(0,GameState->PlayerEyeHeight,0);
-    vec3 RayDirection = CameraFront;
-    f32 RayTMin = FLT_MAX;
-    u32 ClosestEntityIndex = 0;
-    
-    for (u32 EntityIndex = 0;
-         EntityIndex < GameState->EntityCount;
-         ++EntityIndex)
-    {
-        entity *Entity = GameState->Entities + EntityIndex;
-        if (Entity != Player)
-        {
-            entity_type_spec *Spec = GameState->EntityTypeSpecs + Entity->Type;
-
-            switch (Spec->CollisionType)
-            {
-                case COLLISION_TYPE_AABB:
-                {
-                    Assert(Spec->CollisionGeometry);
-                    aabb *AABB = &Spec->CollisionGeometry->AABB;
-
-                    f32 ThisTMin;
-                    b32 IsRayIntersecting =
-                        IntersectRayAABB(RayPosition, RayDirection, AABB->Center + Player->WorldPosition.P, AABB->Extents, &ThisTMin, 0);
-
-                    if (IsRayIntersecting && ThisTMin < RayTMin)
-                    {
-                        RayTMin = ThisTMin;
-                        ClosestEntityIndex = EntityIndex;
-                    }
-                } break;
-
-                default:
-                {
-                    continue;
-                } break;
-            }
-        }
-    }
-
-    if (ClosestEntityIndex > 0)
-    {
-        ImmText_DrawQuickString(SimpleStringF("Looking at entity#%d", ClosestEntityIndex).D);
-    }
-
     if (!GameState->Camera.IsThirdPerson)
     {
         DD_DrawPoint(&GameState->DebugDrawRenderUnit, GameState->Camera.Position + CameraGetFront(&GameState->Camera), Vec3(1), 4);
     }
-    
+
+    // NOTE: Update entity animation state
     for (u32 EntityIndex = 0;
          EntityIndex < GameState->EntityCount;
          ++EntityIndex)
@@ -927,71 +625,6 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
     vec3 ViewPosition = CameraGetTruePosition(&GameState->Camera);
     OpenGL_SetUniformVec3F(GameState->StaticRenderUnit.ShaderID, "ViewPosition", (f32 *) &ViewPosition, true);
     OpenGL_SetUniformVec3F(GameState->SkinnedRenderUnit.ShaderID, "ViewPosition", (f32 *) &ViewPosition, true);
-
-    // NOTE: Debug collision polyhedra
-#if 0
-    for (u32 EntityIndex = 0;
-         EntityIndex < GameState->EntityCount;
-         ++EntityIndex)
-    {
-        entity *Entity = GameState->Entities + EntityIndex;
-        entity_type_spec *Spec = GameState->EntityTypeSpecs + Entity->Type;
-
-        if (Spec->CollisionType == COLLISION_TYPE_POLYHEDRON_SET)
-        {
-            Assert(Spec->CollisionGeometry);
-            
-            polyhedron_set *PolyhedronSet = CopyAndTransformPolyhedronSet(&GameState->TransientArena,
-                                                                          &Spec->CollisionGeometry->PolyhedronSet,
-                                                                          Entity->WorldPosition.P,
-                                                                          Entity->WorldPosition.R,
-                                                                          Entity->WorldPosition.S);
-
-            Assert(PolyhedronSet->PolyhedronCount > 0);
-
-            for (u32 PolyhedronIndex = 0;
-                 PolyhedronIndex < PolyhedronSet->PolyhedronCount;
-                 ++PolyhedronIndex)
-            {
-                polyhedron *Polyhedron = PolyhedronSet->Polyhedra + PolyhedronIndex;
-
-                edge *EdgeCursor = Polyhedron->Edges;
-                for (u32 TestPolyhedronEdgeIndex = 0;
-                     TestPolyhedronEdgeIndex < Polyhedron->EdgeCount;
-                     ++TestPolyhedronEdgeIndex, ++EdgeCursor)
-                {
-                    DD_DrawQuickVector(Polyhedron->Vertices[EdgeCursor->AIndex],
-                                       Polyhedron->Vertices[EdgeCursor->BIndex],
-                                       Vec3(1,0,1));
-                }
-
-                vec3 *VertexCursor = Polyhedron->Vertices;
-                for (u32 VertexIndex = 0;
-                     VertexIndex < Polyhedron->VertexCount;
-                     ++VertexIndex, ++VertexCursor)
-                {
-                    DD_DrawQuickPoint(*VertexCursor, Vec3(1,0,0));
-                }
-                
-                polygon *FaceCursor = Polyhedron->Faces;
-                for (u32 FaceIndex = 0;
-                     FaceIndex < Polyhedron->FaceCount;
-                     ++FaceIndex, ++FaceCursor)
-                {
-                    vec3 FaceCentroid = Vec3();
-                    for (u32 VertexIndex = 0;
-                         VertexIndex < FaceCursor->VertexCount;
-                         ++VertexIndex)
-                    {
-                        FaceCentroid += Polyhedron->Vertices[FaceCursor->VertexIndices[VertexIndex]];
-                    }
-                    FaceCentroid /= (f32) FaceCursor->VertexCount;
-                    DD_DrawQuickVector(FaceCentroid, FaceCentroid + 0.25f*FaceCursor->Plane.Normal, Vec3(1,1,1));
-                }
-            }
-        }
-    }
-#endif
 
     //
     // NOTE: Render

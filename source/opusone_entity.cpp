@@ -81,3 +81,71 @@ AddEntity(game_state *GameState,
 
     return Entity;
 }
+
+vec3
+EntityCollideWithWorld(entity *MovingEntity, vec3 OneOverEllipsoidDim, vec3 eEntityP, vec3 eEntityDeltaP, entity *TestEntities)
+{
+    vec3 A = Vec3(-5,0.2f,100);
+    vec3 B = Vec3(-5,15,100);
+    vec3 C = Vec3(-15,0.2f,90);
+
+    vec3 eA = VecHadamard(A, OneOverEllipsoidDim);
+    vec3 eB = VecHadamard(B, OneOverEllipsoidDim);
+    vec3 eC = VecHadamard(C, OneOverEllipsoidDim);
+
+    f32 TimeOfImpact;
+    vec3 CollisionPoint;
+    b32 FoundCollision = EntityTriangleCollide(eEntityP, eEntityDeltaP, eA, eB, eC, &TimeOfImpact, &CollisionPoint);
+
+    ImmText_DrawQuickString(SimpleStringF("FoundCollision: %d", FoundCollision).D);
+
+    if (!FoundCollision)
+    {
+        return eEntityDeltaP;
+    }
+    else
+    {
+        return eEntityDeltaP;
+
+        // TODONEXT: Collision response if collision found (sliding); look at collision.pdf, p47 at "// *** Collision occured ***"
+        // TODONEXT: Don't forget to read the actual section :)
+    }
+}
+
+vec3
+EntityCollideAndSlide(entity *MovingEntity, vec3 EntityEllipsoidDim, vec3 EntityP, vec3 EntityDeltaP, entity *TestEntities)
+{
+    vec3 OneOverEllipsoidDim = 1.0f / EntityEllipsoidDim;
+
+    vec3 eEntityP = VecHadamard(EntityP, OneOverEllipsoidDim);
+    vec3 eEntityDeltaP = VecHadamard(EntityDeltaP, OneOverEllipsoidDim);
+
+    vec3 eAdjustedDeltaP = EntityCollideWithWorld(MovingEntity, OneOverEllipsoidDim, eEntityP, eEntityDeltaP, TestEntities);
+
+    vec3 AdjustedDeltaP = VecHadamard(eAdjustedDeltaP, EntityEllipsoidDim);
+    return AdjustedDeltaP;
+}
+
+void
+EntityIntegrateAndMove(entity *MovingEntity, vec3 EntityEllipsoidDim, vec3 EntityAcc, vec3 *EntityVel,
+                       f32 AccValue, f32 DragValue, f32 DeltaTime, b32 IgnoreCollisions,
+                       entity *TestEntities)
+{
+    // NOTE: Transform acceleration vector from entity local space to world space
+    // TODO: Do this better
+    EntityAcc = AccValue * RotateVecByQuatSlow(VecNormalize(EntityAcc), MovingEntity->WorldPosition.R);
+
+    // NOTE: Drag
+    EntityAcc -= DragValue * (*EntityVel);
+    *EntityVel += EntityAcc * DeltaTime;
+
+    vec3 EntityP = MovingEntity->WorldPosition.P + Vec3(0,EntityEllipsoidDim.Y,0);
+    vec3 EntityDeltaP = 0.5f * EntityAcc * Square(DeltaTime) + (*EntityVel) * DeltaTime;
+
+    if (!IgnoreCollisions && VecLengthSq(EntityDeltaP) > FLT_EPSILON)
+    {
+        EntityDeltaP = EntityCollideAndSlide(MovingEntity, EntityEllipsoidDim, EntityP, EntityDeltaP, TestEntities);
+    }
+
+    MovingEntity->WorldPosition.P += EntityDeltaP;
+}

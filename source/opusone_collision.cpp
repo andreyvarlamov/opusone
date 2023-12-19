@@ -1159,15 +1159,15 @@ EntityTriangleCollide(vec3 EntityP, vec3 EntityDeltaP, vec3 A, vec3 B, vec3 C, f
 
     f32 T0, T1;
 
-    f32 Dist = VecDot(PlaneN, EntityP) + PlaneD;
+    f32 DistToPlane = VecDot(PlaneN, EntityP) + PlaneD;
     f32 NDotDeltaP = VecDot(PlaneN, EntityDeltaP);
 
     b32 DeltaPParallel = (AbsF(NDotDeltaP) <= FLT_EPSILON);
-
+    
     if (!DeltaPParallel)
     {
-        T0 = (1 - Dist) / NDotDeltaP;
-        T1 = (-1 - Dist) / NDotDeltaP;
+        T0 = (1 - DistToPlane) / NDotDeltaP;
+        T1 = (-1 - DistToPlane) / NDotDeltaP;
 
         // Swap so T0 < T1
         if (T0 > T1)
@@ -1214,28 +1214,72 @@ EntityTriangleCollide(vec3 EntityP, vec3 EntityDeltaP, vec3 A, vec3 B, vec3 C, f
         T1 = 1;
     }
 
-    f32 TimeOfImpact = T0;
+    f32 EntityDeltaPLenSq = VecLengthSq(EntityDeltaP);
+
+    f32 TimeOfImpact = T1;
+    vec3 CollisionPoint = Vec3();
     b32 FoundCollision = false;
-    
+
     // NOTE: Sweep against vertices
     vec3 Verts[] = { A, B, C };
     for (u32 VertI = 0;
          VertI < ArrayCount(Verts);
          ++VertI)
     {
-        vec3 *V = Verts + VertIndex;
+        vec3 *V = Verts + VertI;
         
-        f32 QuadraticA = VecLengthSq(EntityDeltaP);
+        f32 QuadraticA = EntityDeltaPLenSq;
         f32 QuadraticB = 2 * VecDot(EntityDeltaP, EntityP - *V);
         f32 QuadraticC = VecLengthSq(*V - EntityP) - 1;
 
         f32 NewT;
-        if (GetLowestQuadraticEquation(QuadraticA, QuadraticB, QuadraticC, TimeOfImpact, &NewT))
+        if (GetLowestBoundedQuadraticRoot(QuadraticA, QuadraticB, QuadraticC, TimeOfImpact, &NewT))
         {
             TimeOfImpact = NewT;
-            
+            CollisionPoint = *V;
+            FoundCollision = true;
         }
     }
 
     // NOTE: Sweep against edges
+    struct temp_edge
+    {
+        vec3 P1;
+        vec3 P2;
+    } Edges[] = { { A, B }, { B, C }, { C, A }};
+    for (u32 EdgeI = 0;
+         EdgeI < ArrayCount(Edges);
+         ++EdgeI)
+    {
+        temp_edge *E = Edges + EdgeI;
+
+        vec3 EdgeVec = E->P2 - E->P1;
+        vec3 EntityToVert = E->P1 - EntityP;
+
+        f32 EdgeLenSq = VecLengthSq(EdgeVec);
+        f32 EdgeDotDeltaP = VecDot(EdgeVec, EntityDeltaP);
+        f32 EdgeDotEntityToVert = VecDot(EdgeVec, EntityToVert);
+
+        f32 QuadraticA = EdgeLenSq * -EntityDeltaPLenSq + Square(EdgeDotDeltaP);
+        f32 QuadraticB = EdgeLenSq * 2 * VecDot(EntityDeltaP, EntityToVert) - 2 * EdgeDotDeltaP * EdgeDotEntityToVert;
+        f32 QuadraticC = EdgeLenSq * (1 - VecLengthSq(EntityToVert)) + Square(EdgeDotEntityToVert);
+
+        // NOTE: Does the swept sphere collide against infinite line
+        f32 NewT;
+        if (GetLowestBoundedQuadraticRoot(QuadraticA, QuadraticB, QuadraticC, TimeOfImpact, &NewT))
+        {
+            // NOTE: Check if intersection is within edge's line segment.
+            f32 F = (EdgeDotDeltaP * NewT - EdgeDotEntityToVert) / EdgeLenSq;
+            if (F >= 0 && F <= 1)
+            {
+                TimeOfImpact = NewT;
+                CollisionPoint = E->P1 + F*EdgeVec;
+                FoundCollision = true;
+            }
+        }
+    }
+
+    *Out_TimeOfImpact = TimeOfImpact;
+    *Out_CollisionPoint = CollisionPoint;
+    return FoundCollision;
 }

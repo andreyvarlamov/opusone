@@ -240,6 +240,6 @@ vec3
 GetCollidingVectorComponent(vec3 V, collision_contact *Contact);
 
 b32
-EllipsoidTriangleCollide(vec3 OOEllipsoidDim, vec3 A, vec3 B, vec3 C);
+EntityTriangleCollide(vec3 EntityP, vec3 EntityDeltaP, vec3 A, vec3 B, vec3 C, f32 *Out_TimeOfImpact, vec3 *Out_CollisionPoint);
 
 #endif
