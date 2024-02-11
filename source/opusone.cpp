@@ -62,7 +62,7 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         OpenGL_SetUniformInt(SkinnedShader, "FontAtlas", 0, true);
 
         GameState->Camera.Position = Vec3(0.0f, 0.1f, 5.0f);
-        GameState->Camera.Yaw = 270.0f;
+        GameState->Camera.Yaw = 145.0f;
         GameState->Camera.Pitch = -30.0f;
         GameState->Camera.ThirdPersonRadius = 5.0f;
         GameState->Camera.IsThirdPerson = true;
@@ -450,7 +450,8 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         AddEntity(GameState, EntityType_Snowman, Vec3(5,0,5), Quat(), Vec3(3));
         // GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(0,2,5), Quat(), Vec3(1));
         // GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(-10.9f,-13,0.11f), Quat(), Vec3(1));
-        GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(0,1,100), Quat(), Vec3(1));
+        // GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(0,1,100), Quat(), Vec3(1));
+        GameState->PlayerEntity = AddEntity(GameState, EntityType_Player, Vec3(-12.5f,2.0f,13.8f), Quat(), Vec3(1));
         AddEntity(GameState, EntityType_BoxRoom, Vec3(-40,-30,0), Quat(Vec3(0,0,1), ToRadiansF(30)), Vec3(5,1,1));
         AddEntity(GameState, EntityType_ObstacleCourse, Vec3(0,0,100), Quat(), Vec3(1));
 
@@ -584,13 +585,10 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
         if (RequestedControls->PlayerUp) PlayerAcceleration.Y += 1.0f;
     }
 
-    DD_DrawEllipsoid(&GameState->DebugDrawRenderUnit, Player->WorldPosition.P + Vec3(0,GameState->PlayerEllipsoidDim.Y,0),
-                     GameState->PlayerEllipsoidDim.X, GameState->PlayerEllipsoidDim.Y,
-                     9, 11, Vec3(0,1,0), &GameState->TransientArena);
     
-    vec3 A = Vec3(-5,0.2f,100);
-    vec3 B = Vec3(-5,15,100);
-    vec3 C = Vec3(-15,0.2f,90);
+    vec3 A = Vec3(-5,0.2f,15);
+    vec3 B = Vec3(-5,15,15);
+    vec3 C = Vec3(-15,0.2f,5);
     DD_DrawTriangle(&GameState->DebugDrawRenderUnit, A, B, C, Vec3(1,0,1));
 
     EntityIntegrateAndMove(Player, GameState->PlayerEllipsoidDim, PlayerAcceleration, &GameState->PlayerVelocity,
@@ -599,10 +597,17 @@ GameUpdateAndRender(game_input *GameInput, game_memory *GameMemory, b32 *GameSho
 
     CameraSetWorldPosition(&GameState->Camera, Player->WorldPosition.P + Vec3(0, GameState->PlayerEyeHeight,0));
     
+    DD_DrawEllipsoid(&GameState->DebugDrawRenderUnit, Player->WorldPosition.P + Vec3(0,GameState->PlayerEllipsoidDim.Y,0),
+                     GameState->PlayerEllipsoidDim.X, GameState->PlayerEllipsoidDim.Y,
+                     9, 11, Vec3(0,1,0), &GameState->TransientArena);
+
+    ImmText_DrawQuickString(SimpleStringF("Player P = <%0.3f,%0.3f,%0.3f>", Player->WorldPosition.P.X, Player->WorldPosition.P.Y, Player->WorldPosition.P.Z).D);
+
     if (!GameState->Camera.IsThirdPerson)
     {
         DD_DrawPoint(&GameState->DebugDrawRenderUnit, GameState->Camera.Position + CameraGetFront(&GameState->Camera), Vec3(1), 4);
     }
+
 
     // NOTE: Update entity animation state
     for (u32 EntityIndex = 0;

@@ -83,11 +83,17 @@ AddEntity(game_state *GameState,
 }
 
 vec3
-EntityCollideWithWorld(entity *MovingEntity, vec3 OneOverEllipsoidDim, vec3 eEntityP, vec3 eEntityDeltaP, entity *TestEntities)
+EntityCollideWithWorld(entity *MovingEntity, vec3 OneOverEllipsoidDim, vec3 eEntityP, vec3 eEntityDeltaP, entity *TestEntities,
+                       i32 RecursionDepth)
 {
-    vec3 A = Vec3(-5,0.2f,100);
-    vec3 B = Vec3(-5,15,100);
-    vec3 C = Vec3(-15,0.2f,90);
+    if (RecursionDepth <= 0)
+    {
+        return eEntityP + eEntityDeltaP;
+    }
+    
+    vec3 A = Vec3(-5,0.2f,15);
+    vec3 B = Vec3(-5,15,15);
+    vec3 C = Vec3(-15,0.2f,5);
 
     vec3 eA = VecHadamard(A, OneOverEllipsoidDim);
     vec3 eB = VecHadamard(B, OneOverEllipsoidDim);
@@ -101,14 +107,31 @@ EntityCollideWithWorld(entity *MovingEntity, vec3 OneOverEllipsoidDim, vec3 eEnt
 
     if (!FoundCollision)
     {
-        return eEntityDeltaP;
+        return eEntityP + eEntityDeltaP;
     }
     else
     {
-        return eEntityDeltaP;
+        vec3 eNewEntityP = eEntityP + TimeOfImpact * eEntityDeltaP;
 
-        // TODONEXT: Collision response if collision found (sliding); look at collision.pdf, p47 at "// *** Collision occured ***"
-        // TODONEXT: Don't forget to read the actual section :)
+        vec3 SlidePlaneOrigin = CollisionPoint;
+        vec3 SlidePlaneN = VecNormalize(eNewEntityP - CollisionPoint); // NOTE: From the center of unit sphere to col. point
+        f32 SlidePlaneD = -VecDot(SlidePlaneN, SlidePlaneOrigin);
+
+        vec3 OldP = eEntityP + eEntityDeltaP;
+        f32 OldPToSlidePlane = VecDot(OldP, SlidePlaneN) + SlidePlaneD;
+        
+        vec3 eNewEntityPAfterSlide = OldP - OldPToSlidePlane * SlidePlaneN;
+
+        vec3 eNewEntityDeltaP = eNewEntityPAfterSlide - CollisionPoint; // TODO: It's the CollisionPoint instead of eNewEntityP in paper??
+
+        // NOTE: If distance sufficiently small, don't recurse
+        if(VecLengthSq(eNewEntityDeltaP) <= FLT_EPSILON)
+        {
+            return eNewEntityP;
+        }
+        
+        // NOTE: Recurse
+        return EntityCollideWithWorld(MovingEntity, OneOverEllipsoidDim, eNewEntityP, eNewEntityDeltaP, TestEntities, --RecursionDepth);
     }
 }
 
@@ -120,10 +143,11 @@ EntityCollideAndSlide(entity *MovingEntity, vec3 EntityEllipsoidDim, vec3 Entity
     vec3 eEntityP = VecHadamard(EntityP, OneOverEllipsoidDim);
     vec3 eEntityDeltaP = VecHadamard(EntityDeltaP, OneOverEllipsoidDim);
 
-    vec3 eAdjustedDeltaP = EntityCollideWithWorld(MovingEntity, OneOverEllipsoidDim, eEntityP, eEntityDeltaP, TestEntities);
+    i32 RecursionDepth = 1;
+    vec3 eAdjustedP = EntityCollideWithWorld(MovingEntity, OneOverEllipsoidDim, eEntityP, eEntityDeltaP, TestEntities, RecursionDepth);
 
-    vec3 AdjustedDeltaP = VecHadamard(eAdjustedDeltaP, EntityEllipsoidDim);
-    return AdjustedDeltaP;
+    vec3 AdjustedP = VecHadamard(eAdjustedP, EntityEllipsoidDim);
+    return AdjustedP;
 }
 
 void
@@ -142,10 +166,20 @@ EntityIntegrateAndMove(entity *MovingEntity, vec3 EntityEllipsoidDim, vec3 Entit
     vec3 EntityP = MovingEntity->WorldPosition.P + Vec3(0,EntityEllipsoidDim.Y,0);
     vec3 EntityDeltaP = 0.5f * EntityAcc * Square(DeltaTime) + (*EntityVel) * DeltaTime;
 
-    if (!IgnoreCollisions && VecLengthSq(EntityDeltaP) > FLT_EPSILON)
+    if (VecLengthSq(EntityDeltaP) > FLT_EPSILON)
     {
-        EntityDeltaP = EntityCollideAndSlide(MovingEntity, EntityEllipsoidDim, EntityP, EntityDeltaP, TestEntities);
+        if (!IgnoreCollisions)
+        {
+            EntityP = EntityCollideAndSlide(MovingEntity, EntityEllipsoidDim, EntityP, EntityDeltaP, TestEntities);
+        }
+        else
+        {
+            EntityP += EntityDeltaP;
+        }
     }
 
-    MovingEntity->WorldPosition.P += EntityDeltaP;
+    vec3 ActualDeltaP = (EntityP-Vec3(0,EntityEllipsoidDim.Y,0)) - MovingEntity->WorldPosition.P;
+    ImmText_DrawQuickString(SimpleStringF("DeltaP=<%0.3f,%0.3f,%0.3f>", ActualDeltaP.X, ActualDeltaP.Y, ActualDeltaP.Z).D);
+
+    MovingEntity->WorldPosition.P = EntityP-Vec3(0,EntityEllipsoidDim.Y,0);
 }
